@@ -1,0 +1,47 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Custom Chatbot</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; }
+        textarea { width: 100%; height: 80px; }
+        button { padding: 10px 20px; margin-top: 10px; }
+        #response { margin-top: 20px; white-space: pre-wrap; border-top: 1px solid #ccc; padding-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Ask the Course Assistant</h2>
+    <textarea id="question" placeholder="Ask me anything about your assignment..."></textarea>
+    <br>
+    <button onclick="askBot()">Ask</button>
+    <div id="response"></div>
+
+    <script>
+    async function askBot() {
+        const question = document.getElementById("question").value;
+        const responseDiv = document.getElementById("response");
+        responseDiv.innerText = "Thinking...";
+
+        try {
+            const response = await fetch("/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: question })
+            });
+
+            if (!response.ok) {
+                throw new Error("HTTP error " + response.status);
+            }
+
+            const data = await response.json();
+            responseDiv.innerText = data.response;
+        } catch (err) {
+            console.error("❌ Chat error:", err);
+            responseDiv.innerText = "Error: Could not get a response from the chatbot.";
+        }
+    }
+</script>
+</body>
+</html>
