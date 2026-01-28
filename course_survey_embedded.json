@@ -1,0 +1,271 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "survey_cs351_eoc_fa2026",
+  "title": "CS 351 End-of-Course Survey",
+  "description": "Anonymous feedback to improve the course. Please answer honestly; responses are reviewed after final grades are submitted.",
+  "surveyVersion": 1,
+  "status": "published",
+  "locale": "en-US",
+  "settings": {
+    "anonymous": true,
+    "allowBack": true,
+    "shuffleQuestions": false,
+    "collectOptionalComments": true
+  },
+  "metadata": {
+    "createdAt": "2026-01-26T00:00:00Z",
+    "updatedAt": "2026-01-26T00:00:00Z",
+    "owner": "instructor",
+    "tags": [
+      "end-of-course",
+      "course-evaluation"
+    ]
+  },
+  "questions": [
+    {
+      "id": "q_instructor_clarity",
+      "version": 1,
+      "type": "likert",
+      "prompt": "The instructor explained concepts clearly.",
+      "required": true,
+      "order": 10,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "Strongly disagree",
+          "2": "Disagree",
+          "3": "Neutral",
+          "4": "Agree",
+          "5": "Strongly agree"
+        }
+      },
+      "tags": [
+        "instructor",
+        "clarity"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "q_course_organization",
+      "version": 1,
+      "type": "likert",
+      "prompt": "The course was well organized (schedule, pacing, and expectations were clear).",
+      "required": true,
+      "order": 20,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "Strongly disagree",
+          "2": "Disagree",
+          "3": "Neutral",
+          "4": "Agree",
+          "5": "Strongly agree"
+        }
+      },
+      "tags": [
+        "course",
+        "organization"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "q_feedback_timely",
+      "version": 1,
+      "type": "likert",
+      "prompt": "Feedback on assignments was timely and helped me improve.",
+      "required": true,
+      "order": 30,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "Strongly disagree",
+          "2": "Disagree",
+          "3": "Neutral",
+          "4": "Agree",
+          "5": "Strongly agree"
+        }
+      },
+      "tags": [
+        "assessment",
+        "feedback"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "q_assignments_alignment",
+      "version": 1,
+      "type": "likert",
+      "prompt": "Assignments and projects aligned with what was taught and assessed the intended skills.",
+      "required": true,
+      "order": 40,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "Strongly disagree",
+          "2": "Disagree",
+          "3": "Neutral",
+          "4": "Agree",
+          "5": "Strongly agree"
+        }
+      },
+      "tags": [
+        "assessment",
+        "alignment"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "course_load_reflection",
+      "type": "text",
+      "prompt": "How did the course workload feel relative to credit hours?",
+      "adaptive": true,
+      "tags": [
+        "workload"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "q_materials_useful",
+      "version": 1,
+      "type": "likert",
+      "prompt": "Course materials (slides, readings, examples) supported my learning effectively.",
+      "required": true,
+      "order": 60,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "Strongly disagree",
+          "2": "Disagree",
+          "3": "Neutral",
+          "4": "Agree",
+          "5": "Strongly agree"
+        }
+      },
+      "tags": [
+        "materials"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "q_inclusive_environment",
+      "version": 1,
+      "type": "likert",
+      "prompt": "The course created an inclusive learning environment where I felt respected and able to participate.",
+      "required": true,
+      "order": 70,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "Strongly disagree",
+          "2": "Disagree",
+          "3": "Neutral",
+          "4": "Agree",
+          "5": "Strongly agree"
+        }
+      },
+      "tags": [
+        "climate",
+        "inclusion"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "q_recommend_course",
+      "version": 1,
+      "type": "boolean",
+      "prompt": "I would recommend this course to another student.",
+      "required": true,
+      "order": 80,
+      "options": {
+        "trueLabel": "Yes",
+        "falseLabel": "No"
+      },
+      "tags": [
+        "recommendation"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "q_best_part_open",
+      "version": 1,
+      "type": "text",
+      "prompt": "What was the most valuable part of this course for you?",
+      "required": false,
+      "order": 90,
+      "text": {
+        "multiline": true,
+        "minLength": 0,
+        "maxLength": 1000,
+        "placeholder": "Examples: a topic, assignment, project, or teaching approach."
+      },
+      "tags": [
+        "highlights"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "q_improve_one_thing",
+      "version": 1,
+      "type": "text",
+      "prompt": "What is one change that would most improve this course next time?",
+      "required": false,
+      "order": 100,
+      "text": {
+        "multiline": true,
+        "minLength": 0,
+        "maxLength": 1000,
+        "placeholder": "Be specific if you can (what to change and why)."
+      },
+      "tags": [
+        "improvements"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "q_anything_else",
+      "version": 1,
+      "type": "text",
+      "prompt": "Anything else you'd like the instructor to know?",
+      "required": false,
+      "order": 110,
+      "text": {
+        "multiline": true,
+        "minLength": 0,
+        "maxLength": 1200,
+        "placeholder": "Optional."
+      },
+      "tags": [
+        "other"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    }
+  ]
+}
