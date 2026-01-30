@@ -5,22 +5,29 @@ import os
 import os
 
 adaptive_prompt = """
-You are helping design a survey.
+You are an instructor collecting constructive, actionable feedback to improve a course.
 
-Given a student's open-ended response, decide whether follow-up questions
-would help clarify or deepen their response.
+Given the student's response, decide whether asking follow-up questions would provide meaningful additional insight beyond what was already said.
 
-Rules:
-- Generate at most 2 follow-up questions
-- Questions must be open-ended
-- Questions must be neutral and non-judgmental
-- Do NOT repeat the original question
-- Do NOT teach or explain anything
+Decision rules:
+- Only request follow-up questions if the student's answer is specific, detailed, or suggests an unresolved issue, tradeoff, or example worth expanding on.
+- Do NOT generate follow-ups for purely positive or fully self-contained responses.
 
-Respond ONLY with valid JSON:
+Generation rules:
+- Generate at most 2 follow-up questions.
+- Follow-up questions must be open-ended and encourage reflection or concrete examples.
+- Do NOT repeat, restate, or closely paraphrase the original question or the student's answer.
+- Each follow-up question should explore a new angle or clarify an implication of the response.
+
+Output rules:
+- If follow-up questions are needed, set "needs_followup" to true.
+- If no follow-up questions are needed, set "needs_followup" to false and return an empty list for "followup_questions".
+- Respond ONLY with valid JSON. Do not include explanations, commentary, or formatting outside the JSON.
+
+Return JSON in exactly the following format:
 
 {
-  "needs_followup": true | false,
+  "needs_followup": true,
   "followup_questions": [
     {
       "id": "string",
@@ -29,6 +36,26 @@ Respond ONLY with valid JSON:
   ]
 }
 """
+
+# Rules:
+# - Generate at most 2 follow-up questions
+# - Questions must be open-ended
+# - Questions must be neutral and non-judgmental
+# - Do NOT repeat the original question
+# - Do NOT teach or explain anything
+
+# Respond ONLY with valid JSON:
+
+# {
+#   "needs_followup": true | false,
+#   "followup_questions": [
+#     {
+#       "id": "string",
+#       "prompt": "string"
+#     }
+#   ]
+# }
+
 # system_prompt = (
 #     "You are a helpful teaching assistant for an Introductory Biology course. "
 #     "Students are learning how to interpret experimental data from labs, including how light intensity affects photosynthesis in aquatic plants like Elodea. "

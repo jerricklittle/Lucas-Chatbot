@@ -10,10 +10,12 @@ current_index = {'value': 0}
 
 answers = {}  # key = questionId, value = response object
 dynamic_questions = []
+
+def get_all_questions():
+    return survey['questions'] + dynamic_questions
 def save_answer(question, value):
     answers[question['id']] = {
         'questionId': question['id'],
-        'questionVersion': question['version'],
         'questionType': question['type'],
         'value': value,
     }
@@ -21,6 +23,8 @@ def save_answer(question, value):
 def handle_text_answer(question, value):
     # 1. Always save the answer
     save_answer(question, value)
+    print("CALLING GPT FOR FOLLOWUPS...")
+    print("STUDENT TEXT:", value)
 
     # 2. Guardrails
     if not question.get('adaptive', False):
@@ -29,7 +33,7 @@ def handle_text_answer(question, value):
     if question.get('triggered_by'):
         return  # never trigger follow-ups from follow-ups
 
-    if not value or len(value.strip()) < 30:
+    if not value or len(value.strip()) < 15:
         return
 
     # 3. Call the chatbot
@@ -49,9 +53,10 @@ def handle_text_answer(question, value):
                 "prompt": fq['prompt'],
                 "triggered_by": question['id'],
             })
+        survey_page.refresh()
 
 def next_page():
-    if current_index['value'] < len(survey['questions']) - 1:
+    if current_index['value'] < len(get_all_questions()) - 1:
         current_index['value'] += 1
         survey_page.refresh()
 
@@ -61,7 +66,8 @@ def prev_page():
         survey_page.refresh()
 @ui.refreshable
 def survey_page(dialog):
-    q = survey['questions'][current_index['value']]
+    questions = get_all_questions()
+    q = questions[current_index['value']]
 
     ui.label(q['prompt']).classes('text-lg font-semibold')
 
@@ -93,10 +99,14 @@ def survey_page(dialog):
     # --- Text ---
     elif q['type'] == 'text':
         ui.textarea(
-            placeholder=q['text'].get('placeholder', ''),
+            placeholder = q.get('text', {}).get('placeholder', ''),
             value=answers.get(q['id'], {}).get('value', ''),
             on_change=lambda e: handle_text_answer(q, e.value),
         )
+        # ui.textarea.on(
+        #     'blur',
+        #     lambda e: handle_text_answer(q, textarea.value)
+        # )
 
 
     ui.separator()
@@ -107,7 +117,7 @@ def survey_page(dialog):
             ui.button('Back', on_click=prev_page)
 
         with ui.row():
-            if current_index['value'] < len(survey['questions']) - 1:
+            if current_index['value'] < len(get_all_questions()) - 1:
                 ui.button('Next', on_click=next_page)
             else:
                 ui.button('Submit', on_click=lambda: submit_survey(dialog))
@@ -129,8 +139,5 @@ with ui.dialog() as dialog:
         survey_page(dialog)
 
 ui.button('Start Survey', on_click=dialog.open)
-
-def should_trigger_adaptive(text):
-    return text and len(text.strip()) > 30
 
 ui.run()
