@@ -1,17 +1,13 @@
-from typing import List
-from typing import Optional
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.dialects.postgresql import JSONB, insert
-
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.schema import Column
+from sqlalchemy.types import Integer
 
 class Base(DeclarativeBase):
     pass
 
-class responses(Base):
+class Response(Base):
     __tablename__ = "responses"
 
-    response: Mapped[JSONB] = mapped_column(JSONB)
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Column[Integer] = Column[Integer](Integer, primary_key=True)
+    response: Column[JSONB] = Column[JSONB](JSONB)

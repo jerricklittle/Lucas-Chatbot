@@ -2,10 +2,11 @@ import json
 from nicegui import ui
 from datetime import datetime
 
-from sqlalchemy import MetaData, create_engine, insert
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from chatbot import analyze_response_for_survey
 from dotenv import load_dotenv
-from responses import responses
+from responses import Base, Response
 import uuid
 
 
@@ -16,7 +17,7 @@ with open('course_survey_embedded.json') as f:
 
 current_index = {'value': 0}
 answers = {}                # key = questionId, value = response object
-dynamic_questions = []      # follow-up questions injected at runtime
+dynamic_questions: list[dict] = []      # follow-up questions injected at runtime
 
 
 
@@ -76,24 +77,30 @@ def prev_page():
         current_index['value'] -= 1
         survey_page.refresh()
 
+
 def submit_survey(dialog):
     submission = {
-        'id':             str(uuid.uuid4()),
-        'surveyId':       survey['id'],
-        'surveyVersion':  survey['surveyVersion'],
-        'submittedAt':    datetime.utcnow().isoformat(),
-        'answers':        list(answers.values()),
+        'id': str(uuid.uuid4()),
+        'surveyId': survey['id'],
+        'surveyVersion': survey['surveyVersion'],
+        'submittedAt': datetime.utcnow().isoformat(),
+        'answers': list(answers.values()),
     }
-    data = json.dumps(submission, indent=2)
+
+    # data = json.dumps(submission, indent=2)
     # print(json.dumps(submission, indent=2))
-    engine = create_engine("postgresql://postgres:postgres@localhost:5432/sai_db")
-    meta_data = MetaData()
-    meta_data.reflect(bind = engine)
-    responses_table = meta_data.tables["responses"]
-    insert_statement = insert(responses_table).values(data = data)
-    connection = engine.connect()
-    connection.execute(insert_statement)
-    connection.commit()
+
+    engine = create_engine("postgresql://postgres:postgres@localhost/sai_db") 
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    Base.metadata.create_all(engine)
+
+    response_data = submission
+    response = Response(response=response_data)
+
+    session.add(response)
+    session.commit()
 
     dialog.close()
 

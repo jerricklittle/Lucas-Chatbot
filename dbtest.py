@@ -1,25 +1,17 @@
-import json
-from nicegui import ui
-from datetime import datetime
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-from sqlalchemy import MetaData, create_engine, insert
-from chatbot import analyze_response_for_survey
-from dotenv import load_dotenv
-from responses import responses
-import uuid
+from responses import Base, Response
 
-submission: dict = {
-      "type": "string",
-      "minLength": 1
-    }
+engine = create_engine("postgresql://postgres:postgres@localhost/sai_db") 
+Session = sessionmaker(bind=engine)
+session = Session()
 
-data = json.dumps(submission, indent=2)
-    # print(json.dumps(submission, indent=2))
-engine = create_engine("postgresql://postgres:postgres@localhost:5432/sai_db")
-meta_data = MetaData()
-meta_data.reflect(bind = engine)
-responses_table = meta_data.tables["responses"]
-insert_statement = insert(responses_table).values(data = data)
-connection = engine.connect()
-connection.execute(insert_statement)
-connection.commit()
+Base.metadata.create_all(engine)
+
+response_data = {'a': 1, 'b': 'foo', 'c': [1, 1, 2, 3, 5, 8, 13]}
+response = Response(response=response_data)
+
+# Insert it into the database
+session.add(response)
+session.commit()
