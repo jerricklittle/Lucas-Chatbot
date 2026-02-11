@@ -11,8 +11,6 @@ import uuid
 
 
 load_dotenv()
-
-# ─── Load survey data ────────────────────────────────────────────
 with open('course_survey_embedded.json') as f:
     survey = json.load(f)
 
@@ -42,7 +40,7 @@ def save_answer(question, value):
 
 
 def handle_text_answer(question, value):
-    """Save text answer (no longer triggers immediate GPT calls)"""
+    """Save text answer"""
     save_answer(question, value)
 
 

@@ -107,39 +107,39 @@ async def analyze_all_responses_for_survey(text_responses):
     return cleaned_response.strip()
 
 
-async def analyze_response_for_survey(text):
-    """
-    Legacy function - analyzes a single response.
-    This is kept for backwards compatibility but is no longer used
-    in the main survey flow.
-    """
-    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# async def analyze_response_for_survey(text):
+#     """
+#     Legacy function - analyzes a single response.
+#     This is kept for backwards compatibility but is no longer used
+#     in the main survey flow.
+#     """
+#     client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
-    response = await client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": adaptive_prompt},
-            {"role": "user", "content": text}
-        ],
-        temperature=0.2,
-    )
+#     response = await client.chat.completions.create(
+#         model="gpt-4o",
+#         messages=[
+#             {"role": "system", "content": adaptive_prompt},
+#             {"role": "user", "content": text}
+#         ],
+#         temperature=0.2,
+#     )
     
-    return response.choices[0].message.content
+#     return response.choices[0].message.content
 
 
-async def ask_chatbot(prompt, system_role=adaptive_prompt):
-    """
-    General purpose chatbot function for custom prompts.
-    """
-    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# async def ask_chatbot(prompt, system_role=adaptive_prompt):
+#     """
+#     General purpose chatbot function for custom prompts.
+#     """
+#     client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
-    response = await client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_role},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7
-    )
+#     response = await client.chat.completions.create(
+#         model="gpt-4o",
+#         messages=[
+#             {"role": "system", "content": system_role},
+#             {"role": "user", "content": prompt}
+#         ],
+#         temperature=0.7
+#     )
     
-    return response.choices[0].message.content
+#     return response.choices[0].message.content
