@@ -212,6 +212,7 @@
       "version": 1,
       "type": "text",
       "prompt": "What was the most valuable part of this course for you?",
+      "adaptive": true,
       "required": false,
       "order": 90,
       "text": {
@@ -232,6 +233,7 @@
       "version": 1,
       "type": "text",
       "prompt": "What is one change that would most improve this course next time?",
+      "adaptive": true,
       "required": false,
       "order": 100,
       "text": {

@@ -1,8 +1,6 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 import os
 
-
-import os
 
 adaptive_prompt = """
 You are an instructor collecting constructive, actionable feedback to improve a course.
@@ -24,7 +22,7 @@ Decision rules:
   happened and why it mattered).
 
 Generation rules:
-- Generate at most 2 follow-up questions.
+- Generate at most 2 follow-up questions per student response.
 - If the student was vague or negative without detail, the first follow-up
   should gently ask them to give a specific example or describe a moment
   that stands out.
@@ -48,55 +46,76 @@ Return JSON in exactly the following format:
   "needs_followup": true,
   "followup_questions": [
     {
-      "id": "string",
-      "prompt": "string"
+      "id": "followup_1",
+      "prompt": "Can you describe a specific example of when this happened?",
+      "source_question_id": "q1"
+    },
+    {
+      "id": "followup_2",
+      "prompt": "How did this impact your learning experience?",
+      "source_question_id": "q1"
     }
   ]
 }
 """
 
-# Rules:
-# - Generate at most 2 follow-up questions
-# - Questions must be open-ended
-# - Questions must be neutral and non-judgmental
-# - Do NOT repeat the original question
-# - Do NOT teach or explain anything
 
-# Respond ONLY with valid JSON:
+async def analyze_all_responses_for_survey(text_responses):
+    """
+    Analyzes multiple student text responses at once and generates
+    follow-up questions for all of them in a single GPT call.
+    
+    Args:
+        text_responses: List of dicts with keys: question_id, text, prompt
+        
+    Returns:
+        JSON string with needs_followup and followup_questions array
+    """
+    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
+    # Build a structured prompt that includes all responses
+    combined_text = "The student provided the following responses:\n\n"
+    
+    for i, response in enumerate(text_responses, 1):
+        combined_text += f"Response {i}:\n"
+        combined_text += f"Original Question: {response['prompt']}\n"
+        combined_text += f"Question ID: {response['question_id']}\n"
+        combined_text += f"Student Answer: {response['text']}\n\n"
+    
+    combined_text += "\nBased on ALL of the above responses, generate follow-up questions where appropriate. "
+    combined_text += "Include the source_question_id field in each follow-up to indicate which response it's addressing."
+    
+    response = await client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": adaptive_prompt},
+            {"role": "user", "content": combined_text}
+        ],
+        temperature=0.2,
+    )
+    
+    # Get the raw response
+    raw_response = response.choices[0].message.content
+    cleaned_response = raw_response.strip()
+    if cleaned_response.startswith('```json'):
+        cleaned_response = cleaned_response[7:]  # Remove ```json
+    if cleaned_response.startswith('```'):
+        cleaned_response = cleaned_response[3:]  # Remove ```
+    if cleaned_response.endswith('```'):
+        cleaned_response = cleaned_response[:-3]  # Remove trailing ```
+    
+    return cleaned_response.strip()
 
-# {
-#   "needs_followup": true | false,
-#   "followup_questions": [
-#     {
-#       "id": "string",
-#       "prompt": "string"
-#     }
-#   ]
-# }
 
-# system_prompt = (
-#     "You are a helpful teaching assistant for an Introductory Biology course. "
-#     "Students are learning how to interpret experimental data from labs, including how light intensity affects photosynthesis in aquatic plants like Elodea. "
-#     "Your job is to help students who feel unsure about how to start their lab assignments. "
-#     "You should guide them in forming scientific claims and justifying those claims using lab data, without giving them the answer. "
-#     "Use the Feynman Technique: ask the student to explain what they understand in their own words, help them identify gaps, and encourage revision and reflection. "
-#     "Stay conversational and supportive, like a peer or lab partner who helps them think it through. "
-#     "Never write their answer for them — just help them gain confidence in starting or refining their own ideas."
-# )
-
-def ask_chatbot(prompt, system_role=adaptive_prompt):
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    response = client.chat.completions.create(model="gpt-4o",
-    messages=[
-        {"role": "system", "content": system_role},
-        {"role": "user", "content": prompt}
-    ],
-    temperature=0.7)
-    return response.choices[0].message.content
-
-def analyze_response_for_survey(text):
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    response = client.chat.completions.create(
+async def analyze_response_for_survey(text):
+    """
+    Legacy function - analyzes a single response.
+    This is kept for backwards compatibility but is no longer used
+    in the main survey flow.
+    """
+    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
+    response = await client.chat.completions.create(
         model="gpt-4o",
         messages=[
             {"role": "system", "content": adaptive_prompt},
@@ -104,4 +123,23 @@ def analyze_response_for_survey(text):
         ],
         temperature=0.2,
     )
+    
+    return response.choices[0].message.content
+
+
+async def ask_chatbot(prompt, system_role=adaptive_prompt):
+    """
+    General purpose chatbot function for custom prompts.
+    """
+    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
+    response = await client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_role},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.7
+    )
+    
     return response.choices[0].message.content
