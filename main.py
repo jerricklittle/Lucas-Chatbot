@@ -35,7 +35,7 @@ def save_answer(question, value):
     answers[question['id']] = {
         'questionId':   question['id'],
         'questionType': question['type'],
-        'value':        value,
+        'value':        value
     }
 
 
@@ -167,8 +167,9 @@ def advance_to_dynamic():
 
 def submit_survey(dialog):
     """Save survey submission to database"""
+    uuid_str = str(uuid.uuid4())
     submission = {
-        'id': str(uuid.uuid4()),
+        'id': uuid_str,
         'surveyId': survey['id'],
         'surveyVersion': survey['surveyVersion'],
         'submittedAt': datetime.utcnow().isoformat(),
@@ -182,7 +183,7 @@ def submit_survey(dialog):
     Base.metadata.create_all(engine)
 
     response_data = submission
-    response = Response(response=response_data)
+    response = Response(response=response_data, uuid=uuid_str)
 
     session.add(response)
     session.commit()

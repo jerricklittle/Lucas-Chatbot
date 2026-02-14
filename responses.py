@@ -10,4 +10,5 @@ class Response(Base):
     __tablename__ = "responses"
 
     id: Column[Integer] = Column[Integer](Integer, primary_key=True)
-    response: Column[JSONB] = Column[JSONB](JSONB)
+    response: Column[JSONB] = Column[JSONB](JSONB) 
+    uuid: Column[str] = Column[str](str, unique=True)
