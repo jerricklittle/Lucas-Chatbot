@@ -4,9 +4,11 @@ from nicegui import ui
 from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from Question_Timer import Question_Timer
 from chatbot import analyze_all_responses_for_survey
 from dotenv import load_dotenv
 from responses import Base, Response
+from time_per_question import Time_Per_Question
 import uuid
 
 
@@ -17,6 +19,8 @@ with open('course_survey_embedded.json') as f:
 current_index = {'value': 0}
 answers = {}                # key = questionId, value = response object
 dynamic_questions: list[dict] = []      # follow-up questions injected at runtime
+
+timer = Question_Timer()  # Initialize the timer for tracking time spent on each question
 
 # ─── Survey State Management ─────────────────────────────────────
 survey_state = {
@@ -167,6 +171,7 @@ def advance_to_dynamic():
 
 def submit_survey(dialog):
     """Save survey submission to database"""
+    timer.stop_all()  # Stop the timer when survey is submitted
     uuid_str = str(uuid.uuid4())
     submission = {
         'id': uuid_str,
@@ -186,7 +191,22 @@ def submit_survey(dialog):
     response = Response(response=response_data, uuid=uuid_str)
 
     session.add(response)
+    session.flush()  # Flush to get the response ID before committing
+    response_id = response.id
+
+    timing_data = timer.get_all_times()
+    for question_id, time_seconds in timing_data.items():
+        time_record = Time_Per_Question(
+            response_id=response_id,
+            question_id=question_id,
+            time_spent=time_seconds  # storing as seconds (float)
+        )
+        session.add(time_record)
+        print(f"   ✓ Saved: {question_id} -> {time_seconds:.2f}s")
+    
     session.commit()
+    session.close()
+    print(f"✅ Timing data saved successfully!\n")
 
     dialog.close()
 
@@ -273,6 +293,8 @@ def survey_page(dialog):
     q = questions[current_index['value']]
     total = len(questions)
     current = current_index['value']
+
+    timer.start_question(q['id'])
     
     with ui.column().classes(
         'w-full h-screen bg-gray-100 flex flex-col items-center py-8 gap-4'

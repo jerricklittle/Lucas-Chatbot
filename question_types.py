@@ -3,9 +3,7 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import Column
 from sqlalchemy.types import Integer
-
-class Base(DeclarativeBase):
-    pass
+from Base import Base
 
 class QuestionTypes(Base):
     __tablename__ = "question_types"
