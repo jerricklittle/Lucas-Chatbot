@@ -1,0 +1,378 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "faculty_sai_sentiment_sp26",
+  "title": "SAI Feedback Survey",
+  "description": "Anonymous feedback to improve SAI. Please answer honestly; responses are anonymous, you may stop at any time.",
+  "surveyVersion": 1,
+  "status": "published",
+  "locale": "en-US",
+  "settings": {
+    "anonymous": true,
+    "allowBack": true,
+    "shuffleQuestions": false,
+    "collectOptionalComments": true,
+    "randomize": {   
+      "start": 2,        
+      "end": 10                  
+    }
+  },
+  "metadata": {
+    "createdAt": "2026-03-01T00:00:00Z",
+    "updatedAt": "2026-03-01T00:00:00Z",
+    "owner": "instructor",
+    "tags": [
+      "sentiment_questioniare",
+      "sai_research"
+    ]
+  },
+  "questions": [
+    {
+      "id": "UMUX_Lite_req",
+      "version": 1,
+      "type": "likert",
+      "prompt": "The Student Assessment of Instruction (SAI) report's capabilities meet my requirements.",
+      "required": true,
+      "order": 10,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "Strongly disagree",
+          "2": "Disagree",
+          "3": "Neutral",
+          "4": "Agree",
+          "5": "Strongly agree"
+        }
+      },
+      "tags": [
+        "UMUX_Lite",
+        "requirements"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "UMUX_Lite_ease",
+      "version": 1,
+      "type": "likert",
+      "prompt": "The Student Assessment of Instruction (SAI) report is easy to use.",
+      "required": true,
+      "order": 2,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "Strongly disagree",
+          "2": "Disagree",
+          "3": "Neutral",
+          "4": "Agree",
+          "5": "Strongly agree"
+        }
+      },
+      "tags": [
+        "UMUX_Lite",
+        "ease_of_use"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "IMI_useful",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I think doing this activity is useful for improving my courses.",
+      "required": true,
+      "order": 30,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "",
+          "3": "",
+          "4": "",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "IMI",
+        "value_useful_subscale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "IMI_benifical",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I believe doing this activity could be beneficial to me.",
+      "required": true,
+      "order": 40,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "",
+          "3": "",
+          "4": "",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "IMI",
+        "value_useful_subscale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "IMI_want_todo",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I did this activity because I wanted to.",
+      "required": true,
+      "order": 40,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "",
+          "3": "",
+          "4": "",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "IMI",
+        "percieved_choice_subscale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "r_IMI_no_choice",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I didn't really have a choice about doing this task.",
+      "required": true,
+      "order": 60,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "",
+          "3": "",
+          "4": "",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "reversed_scale",
+        "IMI",
+        "percieved_choice_subscale"
+
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "IMI_tense",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I felt very tense while doing this activity.",
+      "required": true,
+      "order": 70,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "",
+          "3": "",
+          "4": "",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "IMI",
+        "pressure_tension_subscale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "IMI_relax",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I felt very tense while doing this activity.",
+      "required": true,
+      "order": 70,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "",
+          "3": "",
+          "4": "",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "reversed_scale",
+        "IMI",
+        "pressure_tension_subscale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "IMI_effort",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I put a lot of effort into this.",
+      "required": true,
+      "order": 70,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "",
+          "3": "",
+          "4": "",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "IMI",
+        "effort_importance_subscale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },  
+        {
+      "id": "(R)_IMI_no_effort",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I didn't put much energy into this. ",
+      "required": true,
+      "order": 70,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "",
+          "3": "",
+          "4": "",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "reversed_scale",
+        "IMI",
+        "effort_importance_subscale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "open_how_felt",
+      "version": 1,
+      "type": "text",
+      "prompt": "Describe how you felt after reviewing your SAI reports.",
+      "adaptive": false,
+      "required": false,
+      "order": 90,
+      "text": {
+        "multiline": true,
+        "minLength": 0,
+        "maxLength": 1000,
+        "placeholder": ""
+      },
+      "tags": [
+        "open_end"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "open_missing_useful",
+      "version": 1,
+      "type": "text",
+      "prompt": "What is missing from SAI reports that would be useful to include?",
+      "adaptive": false,
+      "required": false,
+      "order": 90,
+      "text": {
+        "multiline": true,
+        "minLength": 0,
+        "maxLength": 1000,
+        "placeholder": ""
+      },
+      "tags": [
+        "open_end"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },    
+    {
+      "id": "open_hope_remain",
+      "version": 1,
+      "type": "text",
+      "prompt": "What parts of the SAI report would you hope remain in future versions?",
+      "adaptive": false,
+      "required": false,
+      "order": 90,
+      "text": {
+        "multiline": true,
+        "minLength": 0,
+        "maxLength": 1000,
+        "placeholder": ""
+      },
+      "tags": [
+        "open_end"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },    
+    {
+      "id": "open_catch_all",
+      "version": 1,
+      "type": "text",
+      "prompt": "Is there anything else you would like to share with us about the experience of viewing the SAI reports?",
+      "adaptive": false,
+      "required": false,
+      "order": 90,
+      "text": {
+        "multiline": true,
+        "minLength": 0,
+        "maxLength": 1000,
+        "placeholder": ""
+      },
+      "tags": [
+        "open_end"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    }    
+  ]
+}
