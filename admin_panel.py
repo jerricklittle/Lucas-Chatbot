@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from Base import Base
 from survey_models import Survey, QuestionBank, SurveyQuestion
+from authentication import is_authenticated, get_current_user, get_current_user_id, logout_user
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,16 +32,17 @@ def question_index_page():
     """Page 1 from mockups: Question Index - List all questions"""
     
     session = Session()
-    questions = session.query(QuestionBank).order_by(desc(QuestionBank.updated_at)).all()
+    current_user_id = get_current_user_id()
+    questions = session.query(QuestionBank).filter_by(created_by=current_user_id).order_by(desc(QuestionBank.updated_at)).all()
     session.close()
     
     with ui.column().classes('w-full p-8'):
         # Header
         with ui.row().classes('w-full justify-between items-center mb-6'):
             ui.label('Question Index').classes('text-3xl font-bold')
-            ui.button('➕ New', on_click=lambda: ui.navigate.to('/admin/questions/new')).classes(
-                'bg-blue-600 text-white'
-            )
+            with ui.row().classes('gap-2'):
+                ui.button('← Back', on_click=lambda: ui.navigate.to('/admin')).classes('bg-gray-500 text-white')
+                ui.button('➕ New', on_click=lambda: ui.navigate.to('/admin/questions/new')).classes('bg-blue-600 text-white')
         
         # Questions table
         if questions:
@@ -327,7 +329,8 @@ def save_question(form_state, question_id=None, return_survey_id=None):
             name=form_state['name'],
             question_text=form_state['text'],
             question_type=form_state['type'],
-            config=form_state['config']
+            config=form_state['config'],
+            created_by=get_current_user_id()  # Set owner
         )
         session.add(question)
         session.flush()  # Get the ID
@@ -364,16 +367,17 @@ def survey_list_page():
     """Page 4 from mockups: Survey Pages - List all surveys"""
     
     session = Session()
-    surveys = session.query(Survey).order_by(desc(Survey.updated_at)).all()
+    current_user_id = get_current_user_id()
+    surveys = session.query(Survey).filter_by(created_by=current_user_id).order_by(desc(Survey.updated_at)).all()
     session.close()
     
     with ui.column().classes('w-full p-8'):
         # Header
         with ui.row().classes('w-full justify-between items-center mb-6'):
             ui.label('Survey Pages').classes('text-3xl font-bold')
-            ui.button('➕ Add', on_click=lambda: ui.navigate.to('/admin/surveys/new')).classes(
-                'bg-blue-600 text-white'
-            )
+            with ui.row().classes('gap-2'):
+                ui.button('← Back', on_click=lambda: ui.navigate.to('/admin')).classes('bg-gray-500 text-white')
+                ui.button('➕ Add', on_click=lambda: ui.navigate.to('/admin/surveys/new')).classes('bg-blue-600 text-white')
         
         # Surveys table
         if surveys:
@@ -445,7 +449,9 @@ def survey_edit_form(survey=None):
     
     with ui.column().classes('w-full max-w-4xl mx-auto p-8'):
         # Header
-        ui.label('Edit Survey' if is_edit else 'New Survey').classes('text-3xl font-bold mb-6')
+        with ui.row().classes('w-full justify-between items-center mb-6'):
+            ui.label('Edit Survey' if is_edit else 'New Survey').classes('text-3xl font-bold')
+            ui.button('← Back to Surveys', on_click=lambda: ui.navigate.to('/admin/surveys')).classes('bg-gray-500 text-white')
         
         # Survey metadata
         with ui.card().classes('w-full p-6 mb-4'):
@@ -506,20 +512,31 @@ def questions_list_display(survey_id):
     """Display list of questions in a survey"""
     session = Session()
     survey_questions = session.query(SurveyQuestion).filter_by(survey_id=survey_id).order_by(SurveyQuestion.order).all()
+    
+    # Eagerly load the question data before closing session
+    questions_data = []
+    for sq in survey_questions:
+        questions_data.append({
+            'id': sq.id,
+            'order': sq.order,
+            'name': sq.question.name,
+            'text': sq.question.question_text
+        })
+    
     session.close()
     
-    if survey_questions:
-        for sq in survey_questions:
+    if questions_data:
+        for q_data in questions_data:
             with ui.card().classes('w-full p-4 mb-2'):
                 with ui.row().classes('w-full justify-between items-center'):
                     with ui.column():
-                        ui.label(f'{sq.order}. {sq.question.name}').classes('font-semibold')
-                        ui.label(sq.question.question_text[:80] + '...' if len(sq.question.question_text) > 80 else sq.question.question_text).classes('text-sm text-gray-600')
+                        ui.label(f'{q_data["order"]}. {q_data["name"]}').classes('font-semibold')
+                        ui.label(q_data["text"][:80] + '...' if len(q_data["text"]) > 80 else q_data["text"]).classes('text-sm text-gray-600')
                     with ui.row().classes('gap-2'):
                         # Capture sq.id in default argument to avoid closure issue
-                        ui.button(icon='arrow_upward', on_click=lambda sq_id=sq.id: move_question_up(sq_id)).props('flat round dense')
-                        ui.button(icon='arrow_downward', on_click=lambda sq_id=sq.id: move_question_down(sq_id)).props('flat round dense')
-                        ui.button(icon='delete', on_click=lambda sq_id=sq.id: remove_question_from_survey(sq_id)).props('flat round dense color=red')
+                        ui.button(icon='arrow_upward', on_click=lambda sq_id=q_data['id']: move_question_up(sq_id)).props('flat round dense')
+                        ui.button(icon='arrow_downward', on_click=lambda sq_id=q_data['id']: move_question_down(sq_id)).props('flat round dense')
+                        ui.button(icon='delete', on_click=lambda sq_id=q_data['id']: remove_question_from_survey(sq_id)).props('flat round dense color=red')
     else:
         ui.label('No questions added yet.').classes('text-gray-500')
 
@@ -538,7 +555,12 @@ def create_survey_initial(name, description, randomize, start, end):
         }
     
     session = Session()
-    survey = Survey(name=name, description=description, settings=settings)
+    survey = Survey(
+        name=name, 
+        description=description, 
+        settings=settings,
+        created_by=get_current_user_id()  # Set owner
+    )
     session.add(survey)
     session.commit()
     survey_id = survey.id
@@ -573,7 +595,8 @@ def update_survey_details(survey_id, name, description, randomize, start, end):
 def show_question_selector(survey_id):
     """Show dialog to select existing question from bank"""
     session = Session()
-    questions = session.query(QuestionBank).all()
+    current_user_id = get_current_user_id()
+    questions = session.query(QuestionBank).filter_by(created_by=current_user_id).all()
     session.close()
     
     with ui.dialog() as dialog, ui.card().classes('w-96'):
@@ -691,10 +714,19 @@ def remove_question_from_survey(sq_id):
 @ui.page('/admin')
 def admin_home():
     """Admin dashboard home"""
+    # Check authentication
+    if not is_authenticated():
+        ui.navigate.to('/login')
+        return
+    
     with ui.column().classes('w-full max-w-4xl mx-auto p-8'):
         with ui.row().classes('w-full justify-between items-center mb-8'):
-            ui.label('Survey Admin Panel').classes('text-4xl font-bold')
-            ui.button('← Back to Survey', on_click=lambda: ui.navigate.to('/')).classes('bg-gray-500 text-white')
+            with ui.column():
+                ui.label('Survey Admin Panel').classes('text-4xl font-bold')
+                ui.label(f'Logged in as: {get_current_user()}').classes('text-sm text-gray-600')
+            with ui.row().classes('gap-2'):
+                ui.button('← Back to Survey', on_click=lambda: ui.navigate.to('/')).classes('bg-gray-500 text-white')
+                ui.button('Logout', on_click=lambda: ui.navigate.to('/logout')).classes('bg-red-600 text-white')
         
         with ui.row().classes('gap-4'):
             with ui.card().classes('w-64 p-6 cursor-pointer hover:shadow-lg').on('click', lambda: ui.navigate.to('/admin/surveys')):
@@ -709,12 +741,18 @@ def admin_home():
 @ui.page('/admin/questions')
 def admin_questions():
     """Questions index page"""
+    if not is_authenticated():
+        ui.navigate.to('/login')
+        return
     question_index_page()
 
 
 @ui.page('/admin/surveys')
 def admin_surveys():
     """Surveys list page"""
+    if not is_authenticated():
+        ui.navigate.to('/login')
+        return
     survey_list_page()
 
 

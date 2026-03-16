@@ -16,9 +16,10 @@ import uuid
 
 
 load_dotenv()
-with open('faculty_sai_sentiment.json') as f:
+with open('course_survey_embedded.json') as f:
     survey = json.load(f)
 
+# Apply randomization if specified in settings
 if survey['settings'].get('randomize'):
     rand_config = survey['settings']['randomize']
     start_idx = rand_config.get('start', 0)  # Default to first question
@@ -28,6 +29,7 @@ if survey['settings'].get('randomize'):
     questions_to_shuffle = survey['questions'][start_idx:end_idx]
     random.shuffle(questions_to_shuffle)
     survey['questions'][start_idx:end_idx] = questions_to_shuffle
+
 current_index = {'value': 0}
 answers = {}
 dynamic_questions: list[dict] = []
@@ -253,8 +255,9 @@ def survey_page(dialog):
 
 
 # ═══════════════════════════════════════════════════════════════
-# Import admin panel pages
+# Import admin panel pages and auth
 # ═══════════════════════════════════════════════════════════════
+from authentication import login_page, register_page, logout_page
 from admin_panel import (
     admin_home, admin_questions, admin_surveys,
     question_new_page, question_edit_page,
@@ -277,4 +280,4 @@ def landing_page():
             ui.button('⚙️ Manage Surveys', on_click=lambda: ui.navigate.to('/admin')).classes('bg-gray-700 text-white text-lg px-8 py-3 rounded-lg hover:bg-gray-800 shadow-md')
 
 
-ui.run()
+ui.run(storage_secret='your-secret-key-change-this-in-production-12345')

@@ -14,6 +14,7 @@ class Survey(Base):
     description = Column(Text, nullable=True)
     version = Column(Integer, default=1)
     is_active = Column(Boolean, default=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # Who owns this survey
     settings = Column(JSONB, nullable=True)  # Store survey settings like allowBack, etc.
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -34,6 +35,7 @@ class QuestionBank(Base):
     question_text = Column(Text, nullable=False)  # The actual question text/prompt
     question_type = Column(String(50), nullable=False)  # 'likert', 'boolean', 'text'
     version = Column(Integer, default=1)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # Who created this question
     config = Column(JSONB, nullable=False)  # Store type-specific config (options, labels, char limits, etc.)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
