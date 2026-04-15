@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from Base import Base
 from survey_models import Survey, QuestionBank, SurveyQuestion
-from authentication import is_authenticated, get_current_user, get_current_user_id, logout_user
+from authentication import is_authenticated, get_current_user, get_current_user_role, get_current_user_id, logout_user
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -33,7 +33,10 @@ def question_index_page():
     
     session = Session()
     current_user_id = get_current_user_id()
-    questions = session.query(QuestionBank).filter_by(created_by=current_user_id).order_by(desc(QuestionBank.updated_at)).all()
+    # Show user's questions + default questions (created_by=NULL)
+    questions = session.query(QuestionBank).filter(
+        (QuestionBank.created_by == current_user_id) | (QuestionBank.created_by == None)
+    ).order_by(desc(QuestionBank.updated_at)).all()
     session.close()
     
     with ui.column().classes('w-full p-8'):
@@ -368,7 +371,10 @@ def survey_list_page():
     
     session = Session()
     current_user_id = get_current_user_id()
-    surveys = session.query(Survey).filter_by(created_by=current_user_id).order_by(desc(Survey.updated_at)).all()
+    # Show user's surveys + default surveys (created_by=NULL)
+    surveys = session.query(Survey).filter(
+        (Survey.created_by == current_user_id) | (Survey.created_by == None)
+    ).order_by(desc(Survey.updated_at)).all()
     session.close()
     
     with ui.column().classes('w-full p-8'):
@@ -596,7 +602,10 @@ def show_question_selector(survey_id):
     """Show dialog to select existing question from bank"""
     session = Session()
     current_user_id = get_current_user_id()
-    questions = session.query(QuestionBank).filter_by(created_by=current_user_id).all()
+    # Show user's questions + default questions (created_by=NULL)
+    questions = session.query(QuestionBank).filter(
+        (QuestionBank.created_by == current_user_id) | (QuestionBank.created_by == None)
+    ).all()
     session.close()
     
     with ui.dialog() as dialog, ui.card().classes('w-96'):
@@ -736,6 +745,10 @@ def admin_home():
             with ui.card().classes('w-64 p-6 cursor-pointer hover:shadow-lg').on('click', lambda: ui.navigate.to('/admin/questions')):
                 ui.label('❓ Questions').classes('text-2xl font-bold')
                 ui.label('Manage question bank').classes('text-gray-600')
+            
+            with ui.card().classes('w-64 p-6 cursor-pointer hover:shadow-lg').on('click', lambda: ui.navigate.to('/admin/analytics')):
+                ui.label('📊 Analytics').classes('text-2xl font-bold')
+                ui.label('View response insights').classes('text-gray-600')
 
 
 @ui.page('/admin/questions')
@@ -754,6 +767,69 @@ def admin_surveys():
         ui.navigate.to('/login')
         return
     survey_list_page()
+
+
+@ui.page('/admin/analytics')
+def admin_analytics():
+    """Analytics dashboard"""
+    if not is_authenticated():
+        ui.navigate.to('/login')
+        return
+    analytics_page()
+
+
+def analytics_page():
+    """Analytics dashboard - high level summary and insights"""
+    
+    current_user_id = get_current_user_id()
+    session = Session()
+    
+    # Get user's surveys + default surveys (created_by=NULL)
+    surveys = session.query(Survey).filter(
+        (Survey.created_by == current_user_id) | (Survey.created_by == None)
+    ).all()
+    
+    # Get total response count
+    from responses import Response
+    total_responses = session.query(Response).filter(
+        Response.survey_id.in_([s.id for s in surveys]) if surveys else [0]
+    ).count()
+    
+    session.close()
+    
+    with ui.column().classes('w-full max-w-6xl mx-auto p-8'):
+        # Header
+        with ui.row().classes('w-full justify-between items-center mb-6'):
+            ui.label('Analytics Dashboard').classes('text-3xl font-bold')
+            ui.button('← Back', on_click=lambda: ui.navigate.to('/admin')).classes('bg-gray-500 text-white')
+        
+        # High-level stats
+        with ui.row().classes('gap-4 mb-8'):
+            with ui.card().classes('p-6'):
+                ui.label(f'{len(surveys)}').classes('text-4xl font-bold text-blue-600')
+                ui.label('Total Surveys').classes('text-gray-600')
+            
+            with ui.card().classes('p-6'):
+                ui.label(f'{total_responses}').classes('text-4xl font-bold text-green-600')
+                ui.label('Total Responses').classes('text-gray-600')
+        
+        # Survey list with response counts
+        ui.label('Survey Breakdown').classes('text-2xl font-bold mb-4')
+        
+        if surveys:
+            session = Session()
+            for survey in surveys:
+                response_count = session.query(Response).filter_by(survey_id=survey.id).count()
+                
+                with ui.card().classes('w-full p-4 mb-2'):
+                    with ui.row().classes('w-full justify-between items-center'):
+                        with ui.column():
+                            ui.label(survey.name).classes('font-semibold text-lg')
+                            ui.label(survey.description or 'No description').classes('text-sm text-gray-600')
+                        ui.label(f'{response_count} responses').classes('text-blue-600 font-bold')
+            session.close()
+        else:
+            ui.label('No surveys created yet.').classes('text-gray-500 text-center py-8')
 
 
 # Run the admin panel

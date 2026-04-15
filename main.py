@@ -12,11 +12,17 @@ from Base import Base
 from responses import Response
 from time_per_question import Time_Per_Question
 from survey_models import Survey, QuestionBank, SurveyQuestion
+from authentication import login_page, register_page, logout_page
+from admin_panel import (
+    admin_home, admin_questions, admin_surveys, admin_analytics,
+    question_new_page, question_edit_page,
+    survey_new_page, survey_edit_page_route
+)
 import uuid
 
 
 load_dotenv()
-with open('course_survey_embedded.json') as f:
+with open('student_sai_sentiment.json') as f:
     survey = json.load(f)
 
 # Apply randomization if specified in settings
@@ -254,30 +260,28 @@ def survey_page(dialog):
                     ui.button('Next', on_click=next_page).classes('bg-blue-600 text-white hover:bg-blue-700')
 
 
-# ═══════════════════════════════════════════════════════════════
-# Import admin panel pages and auth
-# ═══════════════════════════════════════════════════════════════
-from authentication import login_page, register_page, logout_page
-from admin_panel import (
-    admin_home, admin_questions, admin_surveys,
-    question_new_page, question_edit_page,
-    survey_new_page, survey_edit_page_route
-)
-
-
 # ─── Landing Page ────────────────────────────────────────────────
 @ui.page('/')
 def landing_page():
     with ui.column().classes('w-full h-screen bg-gray-100 flex flex-col items-center justify-center gap-6 px-4'):
-        ui.label('2026 SAI Project').classes('text-4xl font-bold text-gray-800 text-center')
-        ui.label('Complete the survey below to share your feedback').classes('text-gray-500 text-center max-w-md')
+        ui.label('2026 SAI Project').classes('text-4xl font-bold text-gray-800 text-center mb-4')
+        ui.label('Complete the survey below to share your feedback').classes('text-gray-500 text-center max-w-md mb-8')
 
         with ui.dialog().props('maximized') as dialog:
             survey_page(dialog)
 
-        with ui.row().classes('gap-4'):
-            ui.button('Start Survey', on_click=dialog.open).classes('bg-blue-600 text-white text-lg px-8 py-3 rounded-lg hover:bg-blue-700 shadow-md')
-            ui.button('⚙️ Manage Surveys', on_click=lambda: ui.navigate.to('/admin')).classes('bg-gray-700 text-white text-lg px-8 py-3 rounded-lg hover:bg-gray-800 shadow-md')
+        with ui.row().classes('gap-6'):
+            # Student Card
+            with ui.card().classes('w-80 p-8 cursor-pointer hover:shadow-xl transition-shadow').on('click', dialog.open):
+                ui.icon('school', size='3rem').classes('text-blue-600 mb-4')
+                ui.label('Student').classes('text-3xl font-bold text-gray-800')
+                ui.label('Start Survey').classes('text-gray-600 mt-2')
+            
+            # Admin Card
+            with ui.card().classes('w-80 p-8 cursor-pointer hover:shadow-xl transition-shadow').on('click', lambda: ui.navigate.to('/login')):
+                ui.icon('admin_panel_settings', size='3rem').classes('text-gray-700 mb-4')
+                ui.label('Admin').classes('text-3xl font-bold text-gray-800')
+                ui.label('Manage Surveys').classes('text-gray-600 mt-2')
 
 
 ui.run(storage_secret='your-secret-key-change-this-in-production-12345')

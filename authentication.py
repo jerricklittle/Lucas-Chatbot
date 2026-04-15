@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from Base import Base
 from user import User
+from googleSSO import add_google_login_button
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -138,6 +139,9 @@ def login_page():
         with ui.card().classes('w-full max-w-md p-8'):
             ui.label('Admin Login').classes('text-3xl font-bold mb-6 text-center')
             
+            ui.separator().classes('my-0')
+            ui.label('Sign in with email').classes('text-sm text-gray-600 text-center')
+            
             email_input = ui.input('Email', placeholder='professor@university.edu').classes('w-full')
             password_input = ui.input('Password', password=True, password_toggle_button=True).classes('w-full')
             
@@ -157,6 +161,7 @@ def login_page():
             ui.button('Login', on_click=attempt_login).classes('w-full bg-blue-600 text-white mt-4')
             
             ui.separator().classes('my-4')
+            add_google_login_button()
             
             ui.label('Need an account?').classes('text-sm text-gray-600 text-center')
             ui.button('Create Account', on_click=lambda: ui.navigate.to('/register')).classes('w-full bg-gray-600 text-white')

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "id": "faculty_sai_sentiment_sp26",
+  "id": "student_sai_sentiment_sp26",
   "title": "SAI Feedback Survey",
   "description": "Anonymous feedback to improve SAI. Please answer honestly; responses are anonymous, you may stop at any time.",
   "surveyVersion": 1,
@@ -26,7 +26,7 @@
       "id": "UMUX_Lite_req",
       "version": 1,
       "type": "likert",
-      "prompt": "The Student Assessment of Instruction (SAI) report's capabilities meet my requirements.",
+      "prompt": "The  Student Assessment of Instruction (SAI) survey meet my requirements for providing feedback.",
       "required": true,
       "order": 10,
       "scale": {
@@ -78,7 +78,7 @@
       "id": "IMI_useful",
       "version": 1,
       "type": "likert",
-      "prompt": "I think doing this activity is useful for improving my courses.",
+      "prompt": "I think doing this activity is useful for providing instructors feedback.",
       "required": true,
       "order": 30,
       "scale": {
@@ -127,10 +127,10 @@
       }
     },
     {
-      "id": "IMI_want_todo",
+      "id": "IMI_class_quality",
       "version": 1,
       "type": "likert",
-      "prompt": "I did this activity because I wanted to.",
+      "prompt": "I think this is important to do because it can improve class quality.",
       "required": true,
       "order": 40,
       "scale": {
@@ -146,88 +146,7 @@
       },
       "tags": [
         "IMI",
-        "percieved_choice_subscale"
-      ],
-      "metadata": {
-        "createdAt": "2026-03-01T00:00:00Z"
-      }
-    },
-    {
-      "id": "r_IMI_no_choice",
-      "version": 1,
-      "type": "likert",
-      "prompt": "I didn't really have a choice about doing this task.",
-      "required": true,
-      "order": 60,
-      "scale": {
-        "min": 1,
-        "max": 5,
-        "labels": {
-          "1": "not true at all",
-          "2": "not very true",
-          "3": "somewhat true",
-          "4": "true",
-          "5": "very true"
-        }
-      },
-      "tags": [
-        "reversed_scale",
-        "IMI",
-        "percieved_choice_subscale"
-
-      ],
-      "metadata": {
-        "createdAt": "2026-03-01T00:00:00Z"
-      }
-    },
-    {
-      "id": "IMI_tense",
-      "version": 1,
-      "type": "likert",
-      "prompt": "I felt very tense while doing this activity.",
-      "required": true,
-      "order": 70,
-      "scale": {
-        "min": 1,
-        "max": 5,
-        "labels": {
-          "1": "not true at all",
-          "2": "not very true",
-          "3": "somewhat true",
-          "4": "true",
-          "5": "very true"
-        }
-      },
-      "tags": [
-        "IMI",
-        "pressure_tension_subscale"
-      ],
-      "metadata": {
-        "createdAt": "2026-03-01T00:00:00Z"
-      }
-    },
-    {
-      "id": "IMI_relax",
-      "version": 1,
-      "type": "likert",
-      "prompt": "I felt very tense while doing this activity.",
-      "required": true,
-      "order": 70,
-      "scale": {
-        "min": 1,
-        "max": 5,
-        "labels": {
-          "1": "not true at all",
-          "2": "not very true",
-          "3": "somewhat true",
-          "4": "true",
-          "5": "very true"
-        }
-      },
-      "tags": [
-        "reversed_scale",
-        "IMI",
-        "pressure_tension_subscale"
+        "value_useful_subscale"
       ],
       "metadata": {
         "createdAt": "2026-03-01T00:00:00Z"
@@ -259,11 +178,11 @@
         "createdAt": "2026-03-01T00:00:00Z"
       }
     },  
-        {
+    {
       "id": "IMI_no_effort",
       "version": 1,
       "type": "likert",
-      "prompt": "(R) I didn't put much energy into this. ",
+      "prompt": "I didn't put much energy into this. ",
       "required": true,
       "order": 70,
       "scale": {
@@ -287,31 +206,151 @@
       }
     },
     {
-      "id": "open_how_felt",
+      "id": "IMI_do_well",
       "version": 1,
-      "type": "text",
-      "prompt": "Describe how you felt after reviewing your SAI reports.",
-      "adaptive": false,
-      "required": false,
-      "order": 90,
-      "text": {
-        "multiline": true,
-        "minLength": 0,
-        "maxLength": 1000,
-        "placeholder": ""
+      "type": "likert",
+      "prompt": "It was important to me to do well at this task.",
+      "required": true,
+      "order": 70,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "not very true",
+          "3": "somewhat true",
+          "4": "true",
+          "5": "very true"
+        }
       },
       "tags": [
-        "open_end"
+        "IMI",
+        "effort_importance_subscale"
       ],
       "metadata": {
         "createdAt": "2026-03-01T00:00:00Z"
       }
     },
     {
+      "id": "IMI_no_attention",
+      "version": 1,
+      "type": "likert",
+      "prompt": "This activity did not hold my attention at all.",
+      "required": true,
+      "order": 70,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "not very true",
+          "3": "somewhat true",
+          "4": "true",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "IMI",
+        "interest_enjoyment_subscale",
+        "reversed_scale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "IMI_interest",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I would describe this activity as very interesting.",
+      "required": true,
+      "order": 70,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "not very true",
+          "3": "somewhat true",
+          "4": "true",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "IMI",
+        "interest_enjoyment_subscale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "IMI_enjoy",
+      "version": 1,
+      "type": "likert",
+      "prompt": "I thought this activity was quite enjoyable.",
+      "required": true,
+      "order": 70,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "not true at all",
+          "2": "not very true",
+          "3": "somewhat true",
+          "4": "true",
+          "5": "very true"
+        }
+      },
+      "tags": [
+        "IMI",
+        "interest_enjoyment_subscale"
+      ],
+      "metadata": {
+        "createdAt": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "does_provide_feedback",
+      "version": 1,
+      "type": "boolean",
+      "prompt": "When filling out SAI's, do you provide feedback to the open-ended questions?",
+      "required": true,
+      "order": 80,
+      "options": {
+        "trueLabel": "Yes",
+        "falseLabel": "No"
+      },
+      "tags": [
+        "response_tendency"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
+      "id": "completes_all_SAI",
+      "version": 1,
+      "type": "boolean",
+      "prompt": "Do you complete SAI's for all of your classes? ",
+      "required": true,
+      "order": 80,
+      "options": {
+        "trueLabel": "Yes",
+        "falseLabel": "No"
+      },
+      "tags": [
+        "response_tendency"
+      ],
+      "metadata": {
+        "createdAt": "2026-01-26T00:00:00Z"
+      }
+    },
+    {
       "id": "open_missing_useful",
       "version": 1,
       "type": "text",
-      "prompt": "What is missing from SAI reports that would be useful to include?",
+      "prompt": "What is missing from SAI surveys that would be useful to include?",
       "adaptive": false,
       "required": false,
       "order": 90,
@@ -332,7 +371,7 @@
       "id": "open_hope_remain",
       "version": 1,
       "type": "text",
-      "prompt": "What parts of the SAI report would you hope remain in future versions?",
+      "prompt": "What parts of the SAI survey would you hope remain in future versions?",
       "adaptive": false,
       "required": false,
       "order": 90,
@@ -353,7 +392,7 @@
       "id": "open_catch_all",
       "version": 1,
       "type": "text",
-      "prompt": "Is there anything else you would like to share with us about the experience of viewing the SAI reports?",
+      "prompt": "Is there anything else you would like to share with us about the experience of doing SAI surveys?",
       "adaptive": false,
       "required": false,
       "order": 90,
@@ -369,6 +408,6 @@
       "metadata": {
         "createdAt": "2026-03-01T00:00:00Z"
       }
-    }    
+    }
   ]
 }
