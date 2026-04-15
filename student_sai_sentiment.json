@@ -9,7 +9,7 @@
   "settings": {
     "anonymous": true,
     "allowBack": true,
-    "shuffleQuestions": false,
+    "randomize": true,
     "collectOptionalComments": true
   },
   "metadata": {

@@ -27,15 +27,23 @@ with open('student_sai_sentiment.json') as f:
 
 # Apply randomization if specified in settings
 if survey['settings'].get('randomize'):
-    rand_config = survey['settings']['randomize']
-    start_idx = rand_config.get('start', 0)  # Default to first question
-    end_idx = rand_config.get('end', len(survey['questions']))  # Default to last question
+    # Find all questions with "IMI" tag
+    imi_questions = []
+    imi_indices = []
     
-    # Randomize the specified range
-    questions_to_shuffle = survey['questions'][start_idx:end_idx]
-    random.shuffle(questions_to_shuffle)
-    survey['questions'][start_idx:end_idx] = questions_to_shuffle
+    for idx, q in enumerate(survey['questions']):
+        if 'IMI' in q.get('tags', []):
+            imi_questions.append(q)
+            imi_indices.append(idx)
+    
+    # Shuffle only the IMI questions
+    random.shuffle(imi_questions)
+    
+    # Put shuffled IMI questions back in their original positions
+    for new_q, idx in zip(imi_questions, imi_indices):
+        survey['questions'][idx] = new_q
 
+    
 current_index = {'value': 0}
 answers = {}
 dynamic_questions: list[dict] = []
