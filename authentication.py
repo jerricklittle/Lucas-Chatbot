@@ -8,8 +8,8 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from Base import Base
 from user import User
-from googleSSO import add_google_login_button
 from dotenv import load_dotenv
+from googleSSO import add_google_login_button
 
 load_dotenv()
 
@@ -24,6 +24,14 @@ Base.metadata.create_all(engine)
 def is_authenticated() -> bool:
     """Check if user is authenticated"""
     return app.storage.user.get('authenticated', False)
+
+
+def is_admin() -> bool:
+    """Check if user is authenticated AND has admin/instructor role"""
+    if not is_authenticated():
+        return False
+    role = app.storage.user.get('role')
+    return role in ['admin', 'instructor']
 
 
 def get_current_user():
@@ -75,6 +83,7 @@ def login_user(email: str, password: str) -> tuple[bool, str]:
     if not user.check_password(password):
         session.close()
         return False, "Invalid email or password"
+    
     # Save user data BEFORE closing session
     user_id = user.id
     user_email = user.email
@@ -126,24 +135,31 @@ def register_user(email: str, password: str, role: str = 'instructor') -> tuple[
 
 
 @ui.page('/login')
-def login_page():
+def login_page(error: str = None):
     """Login page"""
+
     
     # If already authenticated, redirect to admin
-    if is_authenticated():
+    if is_admin():
         ui.navigate.to('/admin')
         return
     
     with ui.column().classes('w-full h-screen bg-gray-100 flex items-center justify-center'):
-        with ui.card().classes('w-full max-w-md p-8'):
+        with ui.card().classes('w-full max-w-md p-4'):
             ui.label('Admin Login').classes('text-3xl font-bold mb-6 text-center')
             
-            ui.separator().classes('my-0')
-            ui.label('Sign in with email').classes('text-sm text-gray-600 text-center')
+            # Show error if redirected with error param
+            if error == 'admin_only':
+                with ui.card().classes('w-full bg-red-50 border border-red-300 p-4 mb-4'):
+                    ui.label('🚫 Access Denied').classes('text-red-700 font-bold')
+                    ui.label('Only admins and instructors are allowed to access this area.').classes('text-red-600 text-sm')
+            
+            
+            ui.separator().classes('my-4')
+            ui.label('Or sign in with email').classes('text-sm text-gray-600 text-center')
             
             email_input = ui.input('Email', placeholder='professor@university.edu').classes('w-full')
             password_input = ui.input('Password', password=True, password_toggle_button=True).classes('w-full')
-            
             error_label = ui.label('').classes('text-red-600 text-sm mt-2')
             error_label.visible = False
             
@@ -152,7 +168,7 @@ def login_page():
                 if success:
                     ui.navigate.to('/admin')
                 else:
-                    error_label.text = message
+                    error_label.text = ui.label('🚫 Access Denied. Only admins and instructors are allowed to access this area.')
                     error_label.visible = True
             
             password_input.on('keydown.enter', attempt_login)
@@ -161,7 +177,6 @@ def login_page():
             
             ui.separator().classes('my-4')
             add_google_login_button()
-            
             ui.label('Need an account?').classes('text-sm text-gray-600 text-center')
             ui.button('Create Account', on_click=lambda: ui.navigate.to('/register')).classes('w-full bg-gray-600 text-white')
             

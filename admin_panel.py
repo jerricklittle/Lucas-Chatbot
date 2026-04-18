@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from Base import Base
 from survey_models import Survey, QuestionBank, SurveyQuestion
-from authentication import is_authenticated, get_current_user, get_current_user_role, get_current_user_id, logout_user
+from authentication import is_authenticated, is_admin, get_current_user, get_current_user_role, get_current_user_id, logout_user
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,6 +21,7 @@ Session = sessionmaker(bind=engine)
 
 # Create all tables
 Base.metadata.create_all(engine)
+
 
 # ═══════════════════════════════════════════════════════════════
 # QUESTION BANK CRUD
@@ -466,33 +467,25 @@ def survey_edit_form(survey=None):
             # Randomization settings
             ui.label('Randomization Settings').classes('text-lg font-semibold mt-4 mb-2')
             
-            randomize_enabled = ui.checkbox('Randomize question order', 
+            randomize_enabled = ui.checkbox('Randomize IMI-tagged questions', 
                 value=bool(survey.settings.get('randomize')) if is_edit and survey.settings else False
             )
             
-            with ui.row().classes('w-full gap-4'):
-                rand_start = ui.number('Start index (0-based)', value=0, min=0).classes('flex-1')
-                rand_end = ui.number('End index', value=10, min=1).classes('flex-1')
-            
-            ui.label('Questions from start to end (exclusive) will be randomized').classes('text-sm text-gray-500')
+            ui.label('Questions with "IMI" tag will be shuffled randomly').classes('text-sm text-gray-500')
             
             if not is_edit:
                 # Save survey first before adding questions
                 ui.button('Create Survey', on_click=lambda: create_survey_initial(
                     name_input.value, 
                     desc_input.value,
-                    randomize_enabled.value,
-                    rand_start.value,
-                    rand_end.value
+                    randomize_enabled.value
                 )).classes('bg-blue-600 text-white mt-4')
             else:
                 ui.button('Update Details', on_click=lambda: update_survey_details(
                     survey_id, 
                     name_input.value, 
                     desc_input.value,
-                    randomize_enabled.value,
-                    rand_start.value,
-                    rand_end.value
+                    randomize_enabled.value
                 )).classes('bg-blue-600 text-white mt-4')
         
         # Questions section (only show if editing existing survey)
@@ -546,7 +539,7 @@ def questions_list_display(survey_id):
         ui.label('No questions added yet.').classes('text-gray-500')
 
 
-def create_survey_initial(name, description, randomize, start, end):
+def create_survey_initial(name, description, randomize):
     """Create initial survey"""
     if not name.strip():
         ui.notify('Survey name is required', type='negative')
@@ -554,10 +547,7 @@ def create_survey_initial(name, description, randomize, start, end):
     
     settings = {}
     if randomize:
-        settings['randomize'] = {
-            'start': int(start),
-            'end': int(end)
-        }
+        settings['randomize'] = True
     
     session = Session()
     survey = Survey(
@@ -575,7 +565,7 @@ def create_survey_initial(name, description, randomize, start, end):
     ui.navigate.to(f'/admin/surveys/edit/{survey_id}')
 
 
-def update_survey_details(survey_id, name, description, randomize, start, end):
+def update_survey_details(survey_id, name, description, randomize):
     """Update survey metadata"""
     session = Session()
     survey = session.query(Survey).filter_by(id=survey_id).first()
@@ -584,10 +574,7 @@ def update_survey_details(survey_id, name, description, randomize, start, end):
     
     settings = survey.settings or {}
     if randomize:
-        settings['randomize'] = {
-            'start': int(start),
-            'end': int(end)
-        }
+        settings['randomize'] = True
     else:
         settings.pop('randomize', None)  # Remove if disabled
     
@@ -722,16 +709,10 @@ def remove_question_from_survey(sq_id):
 @ui.page('/admin')
 def admin_home():
     """Admin dashboard home"""
-    # Check authentication
-    if not is_authenticated():
-        ui.navigate.to('/login')
+    if not is_admin():
+        ui.navigate.to('/login?error=admin_only')
         return
-    # if get_current_user_role() != 'instructor':
-    #     ui.navigate.to('/login')
-    #     error_label = ui.label('').classes('text-red-600 text-sm mt-2')
-    #     error_label.visible = False
-    #     error_label.text = 'Passwords do not match'
-        return
+    
     with ui.column().classes('w-full max-w-4xl mx-auto p-8'):
         with ui.row().classes('w-full justify-between items-center mb-8'):
             with ui.column():
@@ -758,8 +739,8 @@ def admin_home():
 @ui.page('/admin/questions')
 def admin_questions():
     """Questions index page"""
-    if not is_authenticated():
-        ui.navigate.to('/login')
+    if not is_admin():
+        ui.navigate.to('/login?error=admin_only')
         return
     question_index_page()
 
@@ -767,8 +748,8 @@ def admin_questions():
 @ui.page('/admin/surveys')
 def admin_surveys():
     """Surveys list page"""
-    if not is_authenticated():
-        ui.navigate.to('/login')
+    if not is_admin():
+        ui.navigate.to('/login?error=admin_only')
         return
     survey_list_page()
 
@@ -776,8 +757,8 @@ def admin_surveys():
 @ui.page('/admin/analytics')
 def admin_analytics():
     """Analytics dashboard"""
-    if not is_authenticated():
-        ui.navigate.to('/login')
+    if not is_admin():
+        ui.navigate.to('/login?error=admin_only')
         return
     analytics_page()
 
@@ -825,15 +806,166 @@ def analytics_page():
             for survey in surveys:
                 response_count = session.query(Response).filter_by(survey_id=survey.id).count()
                 
-                with ui.card().classes('w-full p-4 mb-2'):
+                # Save survey data before closing
+                survey_id = survey.id
+                survey_name = survey.name
+                survey_desc = survey.description
+                
+                with ui.card().classes('w-full p-4 mb-2 cursor-pointer hover:shadow-lg').on('click', lambda sid=survey_id: ui.navigate.to(f'/admin/analytics/survey/{sid}')):
                     with ui.row().classes('w-full justify-between items-center'):
                         with ui.column():
-                            ui.label(survey.name).classes('font-semibold text-lg')
-                            ui.label(survey.description or 'No description').classes('text-sm text-gray-600')
+                            ui.label(survey_name).classes('font-semibold text-lg')
+                            ui.label(survey_desc or 'No description').classes('text-sm text-gray-600')
                         ui.label(f'{response_count} responses').classes('text-blue-600 font-bold')
             session.close()
         else:
             ui.label('No surveys created yet.').classes('text-gray-500 text-center py-8')
+
+
+@ui.page('/admin/analytics/survey/{survey_id}')
+def survey_detail_route(survey_id: int):
+    """Survey detail analytics page"""
+    if not is_admin():
+        ui.navigate.to('/login?error=admin_only')
+        return
+    survey_detail_page(survey_id)
+
+
+def survey_detail_page(survey_id: int):
+    """Detailed analytics for a specific survey"""
+    
+    session = Session()
+    
+    # Get survey
+    survey = session.query(Survey).filter_by(id=survey_id).first()
+    if not survey:
+        session.close()
+        ui.label('Survey not found').classes('text-red-600')
+        return
+    
+    # Get questions in order
+    survey_questions = session.query(SurveyQuestion).filter_by(survey_id=survey_id).order_by(SurveyQuestion.order).all()
+    
+    # Get all responses for this survey
+    from responses import Response
+    responses = session.query(Response).filter_by(survey_id=survey_id).all()
+    
+    # Extract response data
+    response_data = [r.response for r in responses]
+    total_responses = len(responses)
+    
+    # Save data before closing
+    survey_name = survey.name
+    survey_desc = survey.description
+    
+    session.close()
+    
+    with ui.column().classes('w-full max-w-6xl mx-auto p-8'):
+        # Header
+        with ui.row().classes('w-full justify-between items-center mb-6'):
+            with ui.column():
+                ui.label(survey_name).classes('text-3xl font-bold')
+                if survey_desc:
+                    ui.label(survey_desc).classes('text-gray-600')
+            ui.button('← Back', on_click=lambda: ui.navigate.to('/admin/analytics')).classes('bg-gray-500 text-white')
+        
+        # Stats
+        with ui.card().classes('p-4 mb-6'):
+            ui.label(f'{total_responses} Total Responses').classes('text-2xl font-bold text-blue-600')
+        
+        # Questions and visualizations
+        if total_responses == 0:
+            ui.label('No responses yet for this survey.').classes('text-gray-500 text-center py-8')
+        else:
+            session = Session()
+            for sq in survey_questions:
+                question = sq.question
+                question_name = question.name
+                question_text = question.question_text
+                question_type = question.question_type
+                
+                with ui.card().classes('w-full p-6 mb-4'):
+                    ui.label(f'Q{sq.order}: {question_text}').classes('text-xl font-semibold mb-4')
+                    
+                    if question_type == 'likert':
+                        # Extract answers for this question
+                        answers = []
+                        for r_data in response_data:
+                            answer = r_data.get(question_name)
+                            if answer is not None:
+                                answers.append(int(answer))
+                        
+                        if answers:
+                            # Count distribution
+                            scale_labels = question.config.get('scale', {}).get('labels', {})
+                            max_scale = max([int(k) for k in scale_labels.keys()])
+                            
+                            counts = {i: 0 for i in range(1, max_scale + 1)}
+                            for ans in answers:
+                                if 1 <= ans <= max_scale:
+                                    counts[ans] = counts.get(ans, 0) + 1
+                            
+                            # Calculate average
+                            avg = sum(answers) / len(answers)
+                            
+                            # Bar chart
+                            chart_data = {
+                                'xAxis': {'type': 'category', 'data': [scale_labels.get(str(i), str(i)) for i in range(1, max_scale + 1)]},
+                                'yAxis': {'type': 'value'},
+                                'series': [{'data': [counts[i] for i in range(1, max_scale + 1)], 'type': 'bar', 'itemStyle': {'color': '#3b82f6'}}],
+                                'tooltip': {'trigger': 'axis'}
+                            }
+                            
+                            ui.echart(chart_data).classes('w-full h-64')
+                            
+                            # Stats
+                            with ui.row().classes('gap-6 mt-4'):
+                                ui.label(f'Average: {avg:.2f}/{max_scale}').classes('text-lg font-semibold text-blue-600')
+                                ui.label(f'Responses: {len(answers)}').classes('text-lg text-gray-600')
+                        else:
+                            ui.label('No responses for this question').classes('text-gray-500')
+                    
+                    elif question_type == 'boolean':
+                        # Extract yes/no answers
+                        answers = []
+                        for r_data in response_data:
+                            answer = r_data.get(question_name)
+                            if answer is not None:
+                                answers.append(answer)
+                        
+                        if answers:
+                            true_count = sum(1 for a in answers if a == True or a == 'true' or a == 'Yes')
+                            false_count = len(answers) - true_count
+                            
+                            true_label = question.config.get('options', {}).get('trueLabel', 'Yes')
+                            false_label = question.config.get('options', {}).get('falseLabel', 'No')
+                            
+                            # Pie chart
+                            chart_data = {
+                                'series': [{
+                                    'type': 'pie',
+                                    'data': [
+                                        {'value': true_count, 'name': true_label},
+                                        {'value': false_count, 'name': false_label}
+                                    ]
+                                }],
+                                'tooltip': {'trigger': 'item'}
+                            }
+                            
+                            ui.echart(chart_data).classes('w-full h-64')
+                            ui.label(f'Responses: {len(answers)}').classes('text-lg text-gray-600 mt-4')
+                        else:
+                            ui.label('No responses for this question').classes('text-gray-500')
+                    
+                    elif question_type == 'text':
+                        # Skip text for now - will handle with GPT later
+                        ui.label('Text responses (visualization coming soon)').classes('text-gray-500 italic')
+                    
+                    elif question_type == 'multi':
+                        # Skip multi for now
+                        ui.label('Multi-select responses (visualization coming soon)').classes('text-gray-500 italic')
+            
+            session.close()
 
 
 # Run the admin panel
