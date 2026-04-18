@@ -65,7 +65,7 @@ async def google_callback(request: Request):
             user = User(
                 email=email,
                 password_hash='',  # No password for OAuth users
-                role='instructor',
+                role='student',  # Default role, adjust as needed
                 is_active=True
             )
             session.add(user)

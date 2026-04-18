@@ -22,7 +22,6 @@ Session = sessionmaker(bind=engine)
 # Create all tables
 Base.metadata.create_all(engine)
 
-
 # ═══════════════════════════════════════════════════════════════
 # QUESTION BANK CRUD
 # ═══════════════════════════════════════════════════════════════
@@ -727,7 +726,12 @@ def admin_home():
     if not is_authenticated():
         ui.navigate.to('/login')
         return
-    
+    # if get_current_user_role() != 'instructor':
+    #     ui.navigate.to('/login')
+    #     error_label = ui.label('').classes('text-red-600 text-sm mt-2')
+    #     error_label.visible = False
+    #     error_label.text = 'Passwords do not match'
+        return
     with ui.column().classes('w-full max-w-4xl mx-auto p-8'):
         with ui.row().classes('w-full justify-between items-center mb-8'):
             with ui.column():

@@ -75,7 +75,6 @@ def login_user(email: str, password: str) -> tuple[bool, str]:
     if not user.check_password(password):
         session.close()
         return False, "Invalid email or password"
-    
     # Save user data BEFORE closing session
     user_id = user.id
     user_email = user.email
