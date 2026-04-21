@@ -4,3 +4,5 @@ flask
 python-dotenv
 psycopg2-binary
 sqlalchemy
+nicegui
+authlib
