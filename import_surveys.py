@@ -13,7 +13,7 @@ from user import User  # Import User so Base knows about users table
 
 # Database setup
 database_url = os.getenv('DATABASE_URL')
-engine = create_engine("database_url")
+engine = create_engine(database_url)
 Session = sessionmaker(bind=engine)
 
 # Create all tables (including users if not exists)

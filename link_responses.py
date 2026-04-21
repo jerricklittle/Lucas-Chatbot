@@ -11,7 +11,7 @@ from survey_models import Survey
 from responses import Response
 
 database_url = os.getenv('DATABASE_URL')
-engine = create_engine("database_url")
+engine = create_engine(database_url)
 Session = sessionmaker(bind=engine)
 
 session = Session()
