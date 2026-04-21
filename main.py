@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import random
 from nicegui import ui
 from datetime import datetime
@@ -50,7 +51,8 @@ dynamic_questions: list[dict] = []
 timer = Question_Timer()
 
 # Database setup
-engine = create_engine("postgresql://postgres:postgres@localhost/sai_db")
+database_url = os.getenv('DATABASE_URL')
+engine = create_engine("database_url")
 Session = sessionmaker(bind=engine)
 Base.metadata.create_all(engine)
 
