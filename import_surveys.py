@@ -4,6 +4,7 @@ Run this once to populate the database with your existing surveys
 """
 
 import json
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from Base import Base
@@ -11,7 +12,8 @@ from survey_models import Survey, QuestionBank, SurveyQuestion
 from user import User  # Import User so Base knows about users table
 
 # Database setup
-engine = create_engine("postgresql://postgres:postgres@localhost/sai_db")
+database_url = os.getenv('DATABASE_URL')
+engine = create_engine("database_url")
 Session = sessionmaker(bind=engine)
 
 # Create all tables (including users if not exists)

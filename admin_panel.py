@@ -4,6 +4,7 @@ Provides CRUD operations for surveys and questions via NiceGUI interface
 """
 
 import json
+import os
 from nicegui import ui
 from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import sessionmaker
@@ -16,7 +17,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Database setup
-engine = create_engine("postgresql://postgres:postgres@localhost/sai_db")
+database_url = os.getenv('DATABASE_URL')
+engine = create_engine("database_url")
 Session = sessionmaker(bind=engine)
 
 # Create all tables

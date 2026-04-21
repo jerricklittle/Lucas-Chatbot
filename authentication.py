@@ -2,6 +2,8 @@
 Authentication system for admin panel
 """
 
+import os
+
 from nicegui import ui, app
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -14,7 +16,8 @@ from googleSSO import add_google_login_button
 load_dotenv()
 
 # Database setup
-engine = create_engine("postgresql://postgres:postgres@localhost/sai_db")
+database_url = os.getenv('DATABASE_URL')
+engine = create_engine("database_url")
 Session = sessionmaker(bind=engine)
 
 # Create users table

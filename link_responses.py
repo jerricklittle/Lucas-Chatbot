@@ -3,12 +3,15 @@ Link existing responses to imported surveys
 Run this to connect your test responses to the database surveys
 """
 
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from survey_models import Survey
 from responses import Response
 
-engine = create_engine("postgresql://postgres:postgres@localhost/sai_db")
+database_url = os.getenv('DATABASE_URL')
+engine = create_engine("database_url")
 Session = sessionmaker(bind=engine)
 
 session = Session()
