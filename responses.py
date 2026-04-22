@@ -10,3 +10,4 @@ class Response(Base):
     survey_id = Column(Integer, ForeignKey('surveys.id'), nullable=True)
     response = Column(JSONB, nullable=False) 
     uuid = Column(String, unique=True, nullable=False)
+    sid = Column(String, nullable=True)

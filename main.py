@@ -10,6 +10,7 @@ from Question_Timer import Question_Timer
 from chatbot import analyze_all_responses_for_survey
 from dotenv import load_dotenv
 from Base import Base
+from fastapi import Request
 from responses import Response
 from time_per_question import Time_Per_Question
 from survey_models import Survey, QuestionBank, SurveyQuestion
@@ -163,7 +164,7 @@ def advance_to_dynamic():
     survey_page.refresh()
 
 
-def submit_survey(dialog):
+def submit_survey(dialog, sid=None):
     timer.stop_all()
     uuid_str = str(uuid.uuid4())
     submission = {
@@ -176,7 +177,7 @@ def submit_survey(dialog):
 
     session = Session()
     response_data = submission
-    response = Response(response=response_data, uuid=uuid_str)
+    response = Response(response=response_data, uuid=uuid_str, sid = sid)
     session.add(response)
     session.flush()
     response_id = response.id
@@ -196,9 +197,9 @@ def submit_survey(dialog):
 
 
 @ui.refreshable
-def survey_page(dialog):
+def survey_page(dialog, sid=None):
     mode = survey_state['mode']
-    
+
     if mode == 'loading':
         with ui.column().classes('w-full h-screen bg-gray-100 flex flex-col items-center justify-center gap-6'):
             with ui.card().classes('w-full max-w-xl bg-white shadow-lg border border-gray-200 rounded-lg px-8 py-12 text-center'):
@@ -218,7 +219,7 @@ def survey_page(dialog):
         with ui.column().classes('w-full h-screen bg-gray-100 flex flex-col items-center justify-center gap-6'):
             with ui.card().classes('w-full max-w-xl bg-white shadow-lg border border-gray-200 rounded-lg px-8 py-12 text-center'):
                 ui.label('Thank You!').classes('text-3xl font-bold text-gray-800 mb-3')
-                ui.button('Submit Survey', on_click=lambda: submit_survey(dialog)).classes('bg-green-600 text-white text-lg px-8 py-3 rounded-lg hover:bg-green-700')
+                ui.button('Submit Survey', on_click=lambda: submit_survey(dialog, sid=sid)).classes('bg-green-600 text-white text-lg px-8 py-3 rounded-lg hover:bg-green-700')
         return
     
     questions = get_all_questions()
@@ -272,13 +273,15 @@ def survey_page(dialog):
 
 # ─── Landing Page ────────────────────────────────────────────────
 @ui.page('/')
-def landing_page():
+def landing_page(request: Request):
+    params = request.query_params
+    sid = params.get('sid', 'default')
     with ui.column().classes('w-full h-screen bg-gray-100 flex flex-col items-center justify-center gap-6 px-4'):
         ui.label('2026 SAI Project').classes('text-4xl font-bold text-gray-800 text-center mb-4')
         ui.label('Complete the survey below to share your feedback').classes('text-gray-500 text-center max-w-md mb-8')
 
         with ui.dialog().props('maximized') as dialog:
-            survey_page(dialog)
+            survey_page(dialog, sid=sid)
 
         with ui.row().classes('gap-6'):
             # Student Card
