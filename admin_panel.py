@@ -473,6 +473,7 @@ def survey_list_page():
                         <q-btn flat round dense icon="content_copy" size="sm" color="purple"
                                @click="$parent.$emit('copy', props.row.id)" />
                         <q-btn flat round dense icon="download" size="sm" color="teal"
+                               title="Export response results (CSV)"
                                @click="$parent.$emit('export', props.row.id)" />
                         <q-btn flat round dense icon="delete" size="sm" color="red" 
                                @click="$parent.$emit('delete', props.row.id)" />
@@ -480,7 +481,7 @@ def survey_list_page():
                 ''')
                 table.on('edit', lambda e: ui.navigate.to(f'/admin/surveys/edit/{e.args}'))
                 table.on('copy', lambda e: copy_survey(e.args))
-                table.on('export', lambda e: export_survey(e.args))
+                table.on('export', lambda e: export_survey_results_csv(e.args))
                 table.on('delete', lambda e: delete_survey(e.args))
         else:
             ui.label('No surveys yet. Click "Add" to create one.').classes('text-gray-500 text-center py-8')
@@ -656,8 +657,8 @@ def copy_survey(survey_id: int) -> None:
         session.close()
 
 
-def export_survey(survey_id: int) -> None:
-    """Export a survey (runtime JSON shape) for download."""
+def export_survey_template_json(survey_id: int) -> None:
+    """Export survey definition (template JSON) for download / re-import."""
     session = Session()
     try:
         payload = load_survey_from_db(session, int(survey_id))
@@ -760,9 +761,9 @@ def survey_edit_form(survey=None):
                         closes_input.value,
                     )).classes('bg-blue-600 text-white')
                     ui.button(
-                        'Export results (CSV)',
-                        on_click=lambda: export_survey_results_csv(survey_id),
-                    ).classes('bg-teal-700 text-white')
+                        'Export survey (JSON)',
+                        on_click=lambda: export_survey_template_json(survey_id),
+                    ).classes('bg-slate-700 text-white')
         
         # Questions section (only show if editing existing survey)
         if is_edit:

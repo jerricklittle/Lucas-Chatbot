@@ -89,7 +89,7 @@ def _question_bank_to_item(q: QuestionBank, sq: SurveyQuestion) -> dict[str, Any
 
 def load_survey_from_db(session: Session, survey_id: int) -> dict[str, Any] | None:
     survey = session.query(Survey).filter_by(id=survey_id).first()
-    if not survey or not survey.is_active:
+    if not survey:
         return None
 
     rows = (
