@@ -479,7 +479,21 @@ def survey_edit_form(survey=None):
         with ui.card().classes('w-full p-6 mb-4'):
             name_input = ui.input('Survey Name', value=survey.name if is_edit else '').classes('w-full')
             desc_input = ui.textarea('Description', value=survey.description if is_edit else '').classes('w-full')
-            
+
+            ui.label('Participant landing page (before questions)').classes('text-lg font-semibold mt-6 mb-1')
+            ui.label(
+                'Rich text: instructions, study summary, informed consent wording, and links. '
+                'Participants must click Continue before the survey opens.'
+            ).classes('text-sm text-gray-500 mb-2')
+            _landing_default = (
+                '<p><strong>Instructions:</strong> Replace this text with what participants should read before starting. '
+                'You can use <em>formatting</em>, lists, and links (e.g. to a full consent PDF).</p>'
+            )
+            _existing_landing = (survey.participant_landing_html or '').strip() if is_edit else ''
+            landing_editor = ui.editor(
+                value=_existing_landing if _existing_landing else _landing_default,
+            ).classes('w-full border border-gray-200 rounded').style('min-height: 280px')
+
             # Randomization settings
             ui.label('Randomization Settings').classes('text-lg font-semibold mt-4 mb-2')
             
@@ -492,16 +506,18 @@ def survey_edit_form(survey=None):
             if not is_edit:
                 # Save survey first before adding questions
                 ui.button('Create Survey', on_click=lambda: create_survey_initial(
-                    name_input.value, 
+                    name_input.value,
                     desc_input.value,
-                    randomize_enabled.value
+                    randomize_enabled.value,
+                    landing_editor.value,
                 )).classes('bg-blue-600 text-white mt-4')
             else:
                 ui.button('Update Details', on_click=lambda: update_survey_details(
-                    survey_id, 
-                    name_input.value, 
+                    survey_id,
+                    name_input.value,
                     desc_input.value,
-                    randomize_enabled.value
+                    randomize_enabled.value,
+                    landing_editor.value,
                 )).classes('bg-blue-600 text-white mt-4')
         
         # Questions section (only show if editing existing survey)
@@ -555,22 +571,31 @@ def questions_list_display(survey_id):
         ui.label('No questions added yet.').classes('text-gray-500')
 
 
-def create_survey_initial(name, description, randomize):
+def _normalize_landing_html(html: str | None) -> str | None:
+    if html is None:
+        return None
+    if not str(html).strip():
+        return None
+    return str(html)
+
+
+def create_survey_initial(name, description, randomize, participant_landing_html=None):
     """Create initial survey"""
     if not name.strip():
         ui.notify('Survey name is required', type='negative')
         return
-    
+
     settings = {}
     if randomize:
         settings['randomize'] = True
-    
+
     session = Session()
     survey = Survey(
-        name=name, 
-        description=description, 
+        name=name,
+        description=description,
         settings=settings,
-        created_by=get_current_user_id()  # Set owner
+        participant_landing_html=_normalize_landing_html(participant_landing_html),
+        created_by=get_current_user_id(),  # Set owner
     )
     session.add(survey)
     session.commit()
@@ -581,19 +606,20 @@ def create_survey_initial(name, description, randomize):
     ui.navigate.to(f'/admin/surveys/edit/{survey_id}')
 
 
-def update_survey_details(survey_id, name, description, randomize):
+def update_survey_details(survey_id, name, description, randomize, participant_landing_html=None):
     """Update survey metadata"""
     session = Session()
     survey = session.query(Survey).filter_by(id=survey_id).first()
     survey.name = name
     survey.description = description
-    
+    survey.participant_landing_html = _normalize_landing_html(participant_landing_html)
+
     settings = survey.settings or {}
     if randomize:
         settings['randomize'] = True
     else:
         settings.pop('randomize', None)  # Remove if disabled
-    
+
     survey.settings = settings
     session.commit()
     session.close()

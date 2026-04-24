@@ -36,10 +36,19 @@ Session = sessionmaker(bind=engine)
 
 def _oauth_redirect_uri(request: Request) -> str:
     """
-    Google Cloud Console must list this URI exactly (including https).
-    Behind Railway/proxies, request.url_for() often yields http:// — use PUBLIC_BASE_URL
-    or RAILWAY_PUBLIC_DOMAIN (see app_config) so the redirect matches Google.
+    Google Cloud Console must list this redirect URI exactly (scheme, host, port, path).
+
+    If ``PUBLIC_BASE_URL`` in ``.env`` points at Railway but you open the app on
+    ``localhost``, using that env for OAuth would send Google the wrong redirect
+    (and you get “invalid request” / redirect_uri_mismatch). For loopback hosts we
+    always build the callback from the request URL so it matches what you opened
+    in the browser.
     """
+    host = (request.url.hostname or "").lower()
+    if host in ("localhost", "127.0.0.1", "::1"):
+        base = str(request.base_url).rstrip("/")
+        return f"{base}/auth/google/callback"
+
     base = get_public_base_url(request)
     if base:
         return f"{base}/auth/google/callback"

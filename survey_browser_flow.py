@@ -357,3 +357,32 @@ def render_survey_flow(session_factory, survey: dict[str, Any], survey_db_id: in
         survey_page(dialog, session_factory)
 
     dialog.open()
+
+
+def render_survey_entry_with_landing(
+    session_factory, survey: dict[str, Any], survey_db_id: int, sid: str
+) -> None:
+    """
+    Optional HTML landing (instructions, consent) before opening the maximized survey dialog.
+    Content is authored by staff in the admin survey editor (trusted HTML).
+    """
+    root = ui.column().classes("w-full min-h-screen bg-slate-50")
+
+    def proceed() -> None:
+        root.clear()
+        render_survey_flow(session_factory, survey, survey_db_id, sid)
+
+    landing = (survey.get("participant_landing_html") or "").strip()
+    with root:
+        if landing:
+            with ui.column().classes("max-w-3xl mx-auto w-full px-4 py-8 gap-6"):
+                ui.label(survey.get("title", "Survey")).classes("text-2xl font-bold text-slate-900")
+                ui.html(landing, sanitize=False).classes(
+                    "survey-landing text-slate-800 text-base leading-relaxed [&_a]:text-blue-700 [&_a]:underline"
+                )
+                ui.button(
+                    "Continue to the survey",
+                    on_click=proceed,
+                ).classes("bg-blue-700 text-white px-6 py-2 rounded-lg w-fit")
+        else:
+            ui.timer(0.05, proceed, once=True)

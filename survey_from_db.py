@@ -74,11 +74,14 @@ def load_survey_from_db(session: Session, survey_id: int) -> dict[str, Any] | No
         for new_q, idx in zip(imi_questions, imi_indices):
             questions[idx] = new_q
 
+    landing = getattr(survey, "participant_landing_html", None) or ""
+
     return {
         "schemaVersion": "1.0.0",
         "id": str(survey.id),
         "title": survey.name,
         "description": survey.description or "",
+        "participant_landing_html": landing,
         "surveyVersion": survey.version,
         "status": "published",
         "locale": "en-US",

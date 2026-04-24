@@ -22,12 +22,39 @@ engine = create_engine(database_url)
 Session = sessionmaker(bind=engine)
 Base.metadata.create_all(engine)
 
+
+def _ensure_survey_participant_landing_column() -> None:
+    """Add participant_landing_html to existing Postgres/SQLite DBs (create_all does not alter tables)."""
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    if not insp.has_table("surveys"):
+        return
+    cols = {c["name"] for c in insp.get_columns("surveys")}
+    if "participant_landing_html" in cols:
+        return
+    with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            conn.execute(
+                text("ALTER TABLE surveys ADD COLUMN IF NOT EXISTS participant_landing_html TEXT")
+            )
+        else:
+            from sqlalchemy.exc import OperationalError
+
+            try:
+                conn.execute(text("ALTER TABLE surveys ADD COLUMN participant_landing_html TEXT"))
+            except OperationalError:
+                pass
+
+
+_ensure_survey_participant_landing_column()
+
 import googleSSO  # noqa: E402, F401
 import authentication  # noqa: E402, F401
 import admin_panel  # noqa: E402, F401
 
 from app_config import get_informed_consent_url  # noqa: E402
-from survey_browser_flow import render_survey_flow  # noqa: E402
+from survey_browser_flow import render_survey_entry_with_landing  # noqa: E402
 from survey_from_db import load_survey_from_db  # noqa: E402
 
 TEAM = [
@@ -149,7 +176,7 @@ def student_survey_entry(survey_id: int, request: Request):
                 ui.button("Project home", on_click=lambda: ui.navigate.to("/")).classes("mt-6")
         return
 
-    render_survey_flow(Session, survey, survey_id, sid)
+    render_survey_entry_with_landing(Session, survey, survey_id, sid)
 
 
 storage_secret = os.getenv("NICEGUI_STORAGE_SECRET", "your-secret-key-change-this-in-production-12345")

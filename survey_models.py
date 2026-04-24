@@ -12,6 +12,8 @@ class Survey(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False)  # Survey name
     description = Column(Text, nullable=True)
+    # Rich HTML (e.g. from ui.editor): instructions, informed consent summary, links — shown before questions.
+    participant_landing_html = Column(Text, nullable=True)
     version = Column(Integer, default=1)
     is_active = Column(Boolean, default=True)
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # Who owns this survey
