@@ -8,8 +8,10 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from Base import Base
+
+import db_models  # noqa: F401 — FK order: users before surveys
+
 from survey_models import Survey, QuestionBank, SurveyQuestion, generate_survey_public_id
-from user import User  # Import User so Base knows about users table
 
 # Database setup
 database_url = os.getenv('DATABASE_URL')

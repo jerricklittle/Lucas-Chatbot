@@ -8,6 +8,8 @@ from starlette.requests import Request
 
 from Base import Base
 
+import db_models  # noqa: F401 — register users + surveys + responses before create_all / backfill
+
 load_dotenv()
 
 try:
