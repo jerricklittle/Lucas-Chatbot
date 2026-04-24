@@ -18,6 +18,7 @@ from datetime import datetime
 from Base import Base
 from survey_models import Survey, QuestionBank, SurveyQuestion, generate_survey_public_id
 from user import User
+from survey_from_db import load_survey_from_db
 from app_config import get_public_base_url
 from authentication import (
     is_admin,
@@ -438,6 +439,7 @@ def survey_list_page():
             with ui.row().classes('gap-2'):
                 ui.button('← Back', on_click=lambda: ui.navigate.to('/admin')).classes('bg-gray-500 text-white')
                 ui.button('➕ Add', on_click=lambda: ui.navigate.to('/admin/surveys/new')).classes('bg-blue-600 text-white')
+                ui.button('Import JSON', on_click=lambda: _open_import_survey_dialog()).classes('bg-slate-700 text-white')
         
         # Surveys table
         if surveys:
@@ -468,14 +470,128 @@ def survey_list_page():
                     <q-td :props="props">
                         <q-btn flat round dense icon="edit" size="sm" color="blue" 
                                @click="$parent.$emit('edit', props.row.id)" />
+                        <q-btn flat round dense icon="content_copy" size="sm" color="purple"
+                               @click="$parent.$emit('copy', props.row.id)" />
+                        <q-btn flat round dense icon="download" size="sm" color="teal"
+                               @click="$parent.$emit('export', props.row.id)" />
                         <q-btn flat round dense icon="delete" size="sm" color="red" 
                                @click="$parent.$emit('delete', props.row.id)" />
                     </q-td>
                 ''')
                 table.on('edit', lambda e: ui.navigate.to(f'/admin/surveys/edit/{e.args}'))
+                table.on('copy', lambda e: copy_survey(e.args))
+                table.on('export', lambda e: export_survey(e.args))
                 table.on('delete', lambda e: delete_survey(e.args))
         else:
             ui.label('No surveys yet. Click "Add" to create one.').classes('text-gray-500 text-center py-8')
+
+
+def _open_import_survey_dialog() -> None:
+    with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl p-6'):
+        ui.label('Import survey from JSON').classes('text-xl font-bold mb-2')
+        ui.label(
+            'Choose a JSON file. It will be imported as a brand new survey under your account.'
+        ).classes('text-sm text-gray-600 mb-4')
+
+        def on_upload(e) -> None:
+            try:
+                raw = e.content.read()
+                data = json.loads(raw.decode('utf-8'))
+            except Exception:
+                ui.notify('Could not read JSON file', type='negative')
+                return
+            try:
+                new_id = import_survey_json_dict(data)
+            except Exception:
+                ui.notify('Import failed (invalid JSON shape)', type='negative')
+                return
+            dialog.close()
+            ui.notify('Survey imported', type='positive')
+            ui.navigate.to(f'/admin/surveys/edit/{new_id}')
+
+        ui.upload(
+            label='Select JSON file',
+            auto_upload=True,
+            on_upload=on_upload,
+        ).props('accept=.json').classes('w-full')
+
+        with ui.row().classes('justify-end w-full mt-4'):
+            ui.button('Close', on_click=dialog.close).classes('bg-gray-200 text-gray-700')
+
+    dialog.open()
+
+
+def import_survey_json_dict(data: dict) -> int:
+    """Import a survey JSON dict as a new survey; return new internal survey id."""
+    title = (data.get('title') or data.get('name') or 'Imported Survey').strip()
+    description = (data.get('description') or '').strip()
+    settings = data.get('settings') or {}
+    landing_html = (data.get('participant_landing_html') or '').strip() or None
+    questions = data.get('questions') or []
+    if not isinstance(questions, list) or not questions:
+        raise ValueError('No questions')
+
+    session = Session()
+    try:
+        pid = generate_survey_public_id()
+        while session.query(Survey).filter(Survey.public_id == pid).first() is not None:
+            pid = generate_survey_public_id()
+
+        survey = Survey(
+            name=title,
+            description=description,
+            settings=settings if isinstance(settings, dict) else {},
+            participant_landing_html=_normalize_landing_html(landing_html),
+            is_active=True,
+            public_id=pid,
+            created_by=get_current_user_id(),
+        )
+        session.add(survey)
+        session.flush()  # get survey.id
+
+        for idx, q in enumerate(questions, 1):
+            if not isinstance(q, dict):
+                continue
+            qtype = str(q.get('type') or q.get('question_type') or 'text').strip()
+            prompt = str(q.get('prompt') or q.get('question_text') or '').strip()
+            qid = str(q.get('id') or q.get('name') or f'q_{idx}').strip()
+
+            cfg: dict = {}
+            if isinstance(q.get('tags'), list):
+                cfg['tags'] = list(q.get('tags'))
+            if qtype == 'likert':
+                cfg['scale'] = q.get('scale') or {}
+            elif qtype == 'boolean':
+                cfg['options'] = q.get('options') or {}
+            elif qtype == 'text':
+                cfg['text'] = q.get('text') or {}
+            elif qtype == 'multi':
+                cfg['options'] = q.get('options') or []
+
+            qb = QuestionBank(
+                name=qid,
+                question_text=prompt or qid,
+                question_type=qtype,
+                version=int(q.get('version') or 1),
+                created_by=get_current_user_id(),
+                config=cfg,
+            )
+            session.add(qb)
+            session.flush()
+
+            session.add(
+                SurveyQuestion(
+                    survey_id=survey.id,
+                    question_id=qb.id,
+                    order=idx,
+                    is_adaptive=bool(q.get('adaptive') or q.get('is_adaptive') or False),
+                )
+            )
+
+        session.commit()
+        return survey.id
+    finally:
+        session.close()
 
 
 def delete_survey(survey_id):
@@ -488,6 +604,71 @@ def delete_survey(survey_id):
         ui.notify(f'Survey "{survey.name}" deleted', type='positive')
     session.close()
     survey_list_page.refresh()
+
+
+def copy_survey(survey_id: int) -> None:
+    """Copy a survey (metadata + question ordering) into a new survey owned by the current user."""
+    session = Session()
+    try:
+        src = session.query(Survey).filter_by(id=int(survey_id)).first()
+        if not src:
+            ui.notify('Survey not found', type='negative')
+            return
+
+        pid = generate_survey_public_id()
+        while session.query(Survey).filter(Survey.public_id == pid).first() is not None:
+            pid = generate_survey_public_id()
+
+        copied = Survey(
+            name=f'{src.name} Copy',
+            description=src.description,
+            settings=dict(src.settings or {}),
+            participant_landing_html=getattr(src, 'participant_landing_html', None),
+            opens_at=getattr(src, 'opens_at', None),
+            closes_at=getattr(src, 'closes_at', None),
+            is_active=bool(src.is_active),
+            public_id=pid,
+            created_by=get_current_user_id(),
+        )
+        session.add(copied)
+        session.flush()
+
+        src_qs = (
+            session.query(SurveyQuestion)
+            .filter_by(survey_id=src.id)
+            .order_by(SurveyQuestion.order)
+            .all()
+        )
+        for sq in src_qs:
+            session.add(
+                SurveyQuestion(
+                    survey_id=copied.id,
+                    question_id=sq.question_id,
+                    order=sq.order,
+                    is_adaptive=bool(sq.is_adaptive),
+                )
+            )
+
+        session.commit()
+        ui.notify('Survey copied', type='positive')
+        ui.navigate.to(f'/admin/surveys/edit/{copied.id}')
+    finally:
+        session.close()
+
+
+def export_survey(survey_id: int) -> None:
+    """Export a survey (runtime JSON shape) for download."""
+    session = Session()
+    try:
+        payload = load_survey_from_db(session, int(survey_id))
+        if not payload:
+            ui.notify('Survey not available for export', type='negative')
+            return
+        name = (payload.get('title') or f'survey_{survey_id}').strip().replace(' ', '_')
+        body = json.dumps(payload, indent=2, ensure_ascii=False)
+        ui.download(body.encode('utf-8'), f'{name}.json')
+    finally:
+        session.close()
 
 
 @ui.page('/admin/surveys/new')
