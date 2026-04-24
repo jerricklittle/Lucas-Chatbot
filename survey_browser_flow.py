@@ -55,15 +55,91 @@ def _get_all_questions(s: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _save_answer(s: dict[str, Any], question: dict[str, Any], value: Any) -> None:
-    s["answers"][question["id"]] = {
+    """Store answer with prompt text so stored responses (esp. AI follow-ups) stay interpretable."""
+    item: dict[str, Any] = {
         "questionId": question["id"],
         "questionType": question["type"],
         "value": value,
     }
+    prompt = question.get("prompt")
+    if prompt is not None and str(prompt).strip():
+        item["questionPrompt"] = str(prompt).strip()
+    triggered = question.get("triggered_by")
+    if triggered:
+        item["triggeredByQuestionId"] = triggered
+    s["answers"][question["id"]] = item
 
 
 def _handle_text_answer(s: dict[str, Any], question: dict[str, Any], value: str) -> None:
     _save_answer(s, question, value)
+
+
+def _build_submission_payload(s: dict[str, Any], survey: dict[str, Any], uuid_str: str) -> dict[str, Any]:
+    """Static answers stay in ``answers``; AI follow-ups go in ``dynamic_questions`` (variable length blob)."""
+    dynamic_ids = {str(q["id"]) for q in s.get("dynamic_questions", []) if q.get("id")}
+    answers_by_id: dict[str, Any] = dict(s.get("answers") or {})
+
+    static_answers: list[dict[str, Any]] = []
+    seen_static: set[str] = set()
+    for q in survey.get("questions", []) or []:
+        if not isinstance(q, dict):
+            continue
+        qid = str(q.get("id") or "").strip()
+        if not qid or qid in dynamic_ids:
+            continue
+        item = answers_by_id.get(qid)
+        if isinstance(item, dict):
+            static_answers.append(item)
+            seen_static.add(qid)
+    for qid, item in answers_by_id.items():
+        if qid in dynamic_ids or qid in seen_static:
+            continue
+        if isinstance(item, dict):
+            static_answers.append(item)
+
+    blob: list[dict[str, Any]] = []
+    for dq in s.get("dynamic_questions", []) or []:
+        if not isinstance(dq, dict):
+            continue
+        qid = str(dq.get("id") or "").strip()
+        if not qid:
+            continue
+        item = answers_by_id.get(qid)
+        if not isinstance(item, dict):
+            continue
+        prompt = str(item.get("questionPrompt") or dq.get("prompt") or "").strip()
+        blob.append(
+            {
+                "questionId": qid,
+                "questionPrompt": prompt,
+                "response": item.get("value"),
+            }
+        )
+
+    listed = {b["questionId"] for b in blob}
+    for qid in sorted(dynamic_ids):
+        if qid in listed:
+            continue
+        item = answers_by_id.get(qid)
+        if not isinstance(item, dict):
+            continue
+        blob.append(
+            {
+                "questionId": qid,
+                "questionPrompt": str(item.get("questionPrompt") or "").strip(),
+                "response": item.get("value"),
+            }
+        )
+
+    return {
+        "id": uuid_str,
+        "surveyId": survey["id"],
+        "surveyVersion": survey["surveyVersion"],
+        "submittedAt": datetime.utcnow().isoformat(),
+        "answers": static_answers,
+        "dynamic_questions": blob,
+        "sid": s["sid"],
+    }
 
 
 def submit_survey(dialog, session_factory, s: dict[str, Any]) -> None:
@@ -89,14 +165,7 @@ def submit_survey(dialog, session_factory, s: dict[str, Any]) -> None:
         s["timer"].stop_all()
         uuid_str = str(uuid.uuid4())
         survey = s["survey"]
-        submission = {
-            "id": uuid_str,
-            "surveyId": survey["id"],
-            "surveyVersion": survey["surveyVersion"],
-            "submittedAt": datetime.utcnow().isoformat(),
-            "answers": list(s["answers"].values()),
-            "sid": s["sid"],
-        }
+        submission = _build_submission_payload(s, survey, uuid_str)
 
         response = Response(
             response=submission,

@@ -749,15 +749,20 @@ def survey_edit_form(survey=None):
                     closes_input.value,
                 )).classes('bg-blue-600 text-white mt-4')
             else:
-                ui.button('Update Details', on_click=lambda: update_survey_details(
-                    survey_id,
-                    name_input.value,
-                    desc_input.value,
-                    randomize_enabled.value,
-                    landing_editor.value,
-                    opens_input.value,
-                    closes_input.value,
-                )).classes('bg-blue-600 text-white mt-4')
+                with ui.row().classes('gap-2 items-center mt-4 flex-wrap'):
+                    ui.button('Update Details', on_click=lambda: update_survey_details(
+                        survey_id,
+                        name_input.value,
+                        desc_input.value,
+                        randomize_enabled.value,
+                        landing_editor.value,
+                        opens_input.value,
+                        closes_input.value,
+                    )).classes('bg-blue-600 text-white')
+                    ui.button(
+                        'Export results (CSV)',
+                        on_click=lambda: export_survey_results_csv(survey_id),
+                    ).classes('bg-teal-700 text-white')
         
         # Questions section (only show if editing existing survey)
         if is_edit:
@@ -774,6 +779,167 @@ def survey_edit_form(survey=None):
                 
                 # Questions list
                 questions_list_display(survey_id)
+
+
+def export_survey_results_csv(survey_id: int) -> None:
+    """Export responses for a survey to CSV (one row per response)."""
+    from responses import Response
+    from sqlalchemy.orm import joinedload
+
+    sess = Session()
+    try:
+        # Map static question ids (QuestionBank.name) -> prompt text, in survey order
+        sq_rows = (
+            sess.query(SurveyQuestion)
+            .options(joinedload(SurveyQuestion.question))
+            .filter_by(survey_id=int(survey_id))
+            .order_by(SurveyQuestion.order)
+            .all()
+        )
+        static_ordered_ids: list[str] = []
+        id_to_prompt: dict[str, str] = {}
+        for sq in sq_rows:
+            q = sq.question
+            if not q:
+                continue
+            qid = str(q.name or '').strip()
+            if not qid:
+                continue
+            static_ordered_ids.append(qid)
+            prompt = str(q.question_text or '').strip()
+            if prompt:
+                id_to_prompt[qid] = prompt
+
+        rows = sess.query(Response).filter_by(survey_id=int(survey_id)).order_by(Response.id.asc()).all()
+        if not rows:
+            ui.notify('No responses yet for this survey', type='warning')
+            return
+
+        def _make_unique(headers: list[str], candidate: str) -> str:
+            base = candidate
+            i = 2
+            while candidate in headers:
+                candidate = f'{base} ({i})'
+                i += 1
+            return candidate
+
+        def _format_dynamic_questions_for_csv(dyn_blob: list) -> str:
+            """Readable multi-line text for one CSV cell (stored DB payload remains JSON)."""
+            if not dyn_blob:
+                return ''
+            blocks: list[str] = []
+            for i, entry in enumerate(dyn_blob, 1):
+                if not isinstance(entry, dict):
+                    continue
+                qid = str(entry.get('questionId') or '').strip()
+                qp = str(entry.get('questionPrompt') or '').strip()
+                resp = entry.get('response')
+                if isinstance(resp, (list, dict)):
+                    resp_s = json.dumps(resp, ensure_ascii=False)
+                else:
+                    resp_s = '' if resp is None else str(resp)
+                id_line = f'\nInternal ID: {qid}' if qid else ''
+                blocks.append(
+                    f'[Follow-up {i}]\n'
+                    f'Question: {qp or "(no prompt stored)"}\n'
+                    f'Response: {resp_s}'
+                    f'{id_line}'
+                )
+            return '\n\n'.join(blocks)
+
+        static_id_set = set(static_ordered_ids)
+
+        # Per-response rows: static answers in separate columns; follow-ups in one readable text blob column.
+        qids: set[str] = set()
+        flattened: list[dict[str, object]] = []
+        for r in rows:
+            payload = r.response or {}
+            answers = payload.get('answers') or []
+            ans_map: dict[str, object] = {}
+            if isinstance(answers, list):
+                for a in answers:
+                    if not isinstance(a, dict):
+                        continue
+                    qid = str(a.get('questionId') or '').strip()
+                    if not qid:
+                        continue
+                    if qid not in static_id_set:
+                        continue
+                    qids.add(qid)
+                    qp = str(a.get('questionPrompt') or '').strip()
+                    if qp:
+                        id_to_prompt[qid] = qp
+                    val = a.get('value')
+                    if isinstance(val, (list, dict)):
+                        ans_map[qid] = json.dumps(val, ensure_ascii=False)
+                    else:
+                        ans_map[qid] = val
+
+            dyn_blob = payload.get('dynamic_questions')
+            if not dyn_blob and isinstance(answers, list):
+                legacy: list[dict[str, object]] = []
+                for a in answers:
+                    if not isinstance(a, dict):
+                        continue
+                    qid = str(a.get('questionId') or '').strip()
+                    if not qid or qid in static_id_set:
+                        continue
+                    legacy.append(
+                        {
+                            'questionId': qid,
+                            'questionPrompt': str(a.get('questionPrompt') or '').strip(),
+                            'response': a.get('value'),
+                        }
+                    )
+                dyn_blob = legacy
+            if not isinstance(dyn_blob, list):
+                dyn_blob = []
+            dyn_str = _format_dynamic_questions_for_csv(dyn_blob)
+
+            flattened.append(
+                {
+                    'sid': payload.get('sid') or r.sid or '',
+                    'submittedAt': payload.get('submittedAt') or '',
+                    'uuid': payload.get('id') or r.uuid or '',
+                    'dynamic_questions': dyn_str,
+                    **ans_map,
+                }
+            )
+
+        ordered_qids = [qid for qid in static_ordered_ids if qid in qids]
+
+        headers: list[str] = ['sid', 'submittedAt', 'uuid']
+        qid_to_header: dict[str, str] = {}
+        for qid in ordered_qids:
+            prompt = id_to_prompt.get(qid)
+            if prompt:
+                label = f'{prompt} ({qid})'
+            else:
+                label = qid
+            label = _make_unique(headers, label)
+            headers.append(label)
+            qid_to_header[qid] = label
+
+        dyn_header = _make_unique(headers, 'dynamic_questions')
+        headers.append(dyn_header)
+
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=headers, extrasaction='ignore')
+        w.writeheader()
+        for item in flattened:
+            out: dict[str, object] = {
+                'sid': item.get('sid', ''),
+                'submittedAt': item.get('submittedAt', ''),
+                'uuid': item.get('uuid', ''),
+            }
+            for qid in ordered_qids:
+                out[qid_to_header[qid]] = item.get(qid, '')
+            out[dyn_header] = item.get('dynamic_questions', '')
+            w.writerow(out)
+
+        ui.download(buf.getvalue().encode('utf-8'), f'survey_{int(survey_id)}_results.csv')
+    finally:
+        sess.close()
 
 
 @ui.refreshable
