@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from nicegui import ui
+from sqlalchemy.exc import IntegrityError
 
 from Question_Timer import Question_Timer
 from chatbot import analyze_all_responses_for_survey
@@ -67,6 +68,95 @@ def _handle_text_answer(s: dict[str, Any], question: dict[str, Any], value: str)
     _save_answer(s, question, value)
 
 
+def submit_survey(dialog, session_factory, s: dict[str, Any]) -> None:
+    session = session_factory()
+    try:
+        existing = (
+            session.query(Response.id)
+            .filter_by(survey_id=s["survey_db_id"], sid=s["sid"])
+            .first()
+        )
+        if existing is not None:
+            s["timer"].stop_all()
+            dialog.close()
+            clear_survey_session()
+            ui.notify(
+                "This survey link was already used to submit a response.",
+                type="warning",
+                position="top",
+            )
+            ui.navigate.to("/")
+            return
+
+        s["timer"].stop_all()
+        uuid_str = str(uuid.uuid4())
+        survey = s["survey"]
+        submission = {
+            "id": uuid_str,
+            "surveyId": survey["id"],
+            "surveyVersion": survey["surveyVersion"],
+            "submittedAt": datetime.utcnow().isoformat(),
+            "answers": list(s["answers"].values()),
+            "sid": s["sid"],
+        }
+
+        response = Response(
+            response=submission,
+            uuid=uuid_str,
+            sid=s["sid"],
+            survey_id=s["survey_db_id"],
+        )
+        session.add(response)
+        session.flush()
+        response_id = response.id
+
+        timing_data = s["timer"].get_all_times()
+        for question_id, time_seconds in timing_data.items():
+            session.add(
+                Time_Per_Question(
+                    response_id=response_id,
+                    question_id=question_id,
+                    time_spent=time_seconds,
+                )
+            )
+
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        s["timer"].stop_all()
+        dialog.close()
+        clear_survey_session()
+        ui.notify(
+            "This survey link was already used to submit a response.",
+            type="warning",
+            position="top",
+        )
+        ui.navigate.to("/")
+        return
+    finally:
+        session.close()
+
+    dialog.close()
+    clear_survey_session()
+    ui.navigate.to("/survey/thanks")
+    try:
+        ui.navigate.history.replace("/survey/thanks")
+    except AttributeError:
+        pass
+
+
+def _queue_submit(s: dict[str, Any]) -> None:
+    dialog = s.get("_dialog")
+    session_factory = s.get("_session_factory")
+    if dialog is None or session_factory is None:
+        return
+
+    def _run() -> None:
+        submit_survey(dialog, session_factory, s)
+
+    ui.timer(0.05, _run, once=True)
+
+
 async def _generate_dynamic_questions(s: dict[str, Any], refresh_fn) -> None:
     text_responses = []
     survey = s["survey"]
@@ -89,8 +179,7 @@ async def _generate_dynamic_questions(s: dict[str, Any], refresh_fn) -> None:
                     )
 
     if not text_responses:
-        s["survey_state"]["mode"] = "complete"
-        refresh_fn()
+        _queue_submit(s)
         return
 
     try:
@@ -111,23 +200,24 @@ async def _generate_dynamic_questions(s: dict[str, Any], refresh_fn) -> None:
     except Exception:
         s["survey_state"]["mode"] = "complete"
 
+    if s["survey_state"]["mode"] == "complete":
+        _queue_submit(s)
+    else:
+        refresh_fn()
+
+
+def _finalize_static_block(s: dict[str, Any], refresh_fn) -> None:
+    s["survey_state"]["mode"] = "loading"
     refresh_fn()
+    asyncio.create_task(_generate_dynamic_questions(s, refresh_fn))
 
 
 def _next_page(s: dict[str, Any], refresh_fn) -> None:
     current = s["current_index"]
-    static_count = s["survey_state"]["static_count"]
-
-    if current == static_count - 1 and s["survey_state"]["mode"] == "static":
-        s["survey_state"]["mode"] = "loading"
-        refresh_fn()
-        asyncio.create_task(_generate_dynamic_questions(s, refresh_fn))
-        return
 
     all_questions = _get_all_questions(s)
     if current == len(all_questions) - 1 and s["survey_state"]["mode"] == "dynamic":
-        s["survey_state"]["mode"] = "complete"
-        refresh_fn()
+        _queue_submit(s)
         return
 
     if current < len(_get_all_questions(s)) - 1:
@@ -154,48 +244,6 @@ def _advance_to_dynamic(s: dict[str, Any], refresh_fn) -> None:
     refresh_fn()
 
 
-def submit_survey(dialog, session_factory, s: dict[str, Any]) -> None:
-    s["timer"].stop_all()
-    uuid_str = str(uuid.uuid4())
-    survey = s["survey"]
-    submission = {
-        "id": uuid_str,
-        "surveyId": survey["id"],
-        "surveyVersion": survey["surveyVersion"],
-        "submittedAt": datetime.utcnow().isoformat(),
-        "answers": list(s["answers"].values()),
-        "sid": s["sid"],
-    }
-
-    session = session_factory()
-    response = Response(
-        response=submission,
-        uuid=uuid_str,
-        sid=s["sid"],
-        survey_id=s["survey_db_id"],
-    )
-    session.add(response)
-    session.flush()
-    response_id = response.id
-
-    timing_data = s["timer"].get_all_times()
-    for question_id, time_seconds in timing_data.items():
-        session.add(
-            Time_Per_Question(
-                response_id=response_id,
-                question_id=question_id,
-                time_spent=time_seconds,
-            )
-        )
-
-    session.commit()
-    session.close()
-    dialog.close()
-    clear_survey_session()
-    ui.notify("Thank you — your responses were submitted.", type="positive", position="top")
-    ui.navigate.to("/")
-
-
 @ui.refreshable
 def survey_page(dialog, session_factory):
     s = _session()
@@ -208,7 +256,7 @@ def survey_page(dialog, session_factory):
 
     if mode == "loading":
         with ui.column().classes(
-            "w-full h-screen bg-gray-100 flex flex-col items-center justify-center gap-6"
+            "w-full min-h-0 max-h-full flex-1 bg-gray-100 flex flex-col items-center justify-center gap-4 py-6"
         ):
             with ui.card().classes(
                 "w-full max-w-xl bg-white shadow-lg border border-gray-200 rounded-lg px-8 py-12 text-center"
@@ -221,7 +269,7 @@ def survey_page(dialog, session_factory):
 
     if mode == "transition":
         with ui.column().classes(
-            "w-full h-screen bg-gray-100 flex flex-col items-center justify-center gap-6"
+            "w-full min-h-0 max-h-full flex-1 bg-gray-100 flex flex-col items-center justify-center gap-4 py-6"
         ):
             with ui.card().classes(
                 "w-full max-w-xl bg-white shadow-lg border border-gray-200 rounded-lg px-8 py-12 text-center"
@@ -239,29 +287,15 @@ def survey_page(dialog, session_factory):
                 ).classes("bg-blue-600 text-white text-lg px-8 py-3 rounded-lg hover:bg-blue-700")
         return
 
-    if mode == "complete":
-        with ui.column().classes(
-            "w-full h-screen bg-gray-100 flex flex-col items-center justify-center gap-6"
-        ):
-            with ui.card().classes(
-                "w-full max-w-xl bg-white shadow-lg border border-gray-200 rounded-lg px-8 py-12 text-center"
-            ):
-                ui.label("Thank You!").classes("text-3xl font-bold text-gray-800 mb-3")
-                ui.button(
-                    "Submit Survey",
-                    on_click=lambda: submit_survey(dialog, session_factory, s),
-                ).classes(
-                    "bg-green-600 text-white text-lg px-8 py-3 rounded-lg hover:bg-green-700"
-                )
-        return
-
     questions = _get_all_questions(s)
     q = questions[s["current_index"]]
     total = len(questions)
     current = s["current_index"]
     s["timer"].start_question(q["id"])
 
-    with ui.column().classes("w-full min-h-screen bg-gray-100 flex flex-col items-center py-8 gap-4"):
+    with ui.column().classes(
+        "w-full min-h-0 max-h-full flex-1 overflow-y-auto bg-gray-100 flex flex-col items-center justify-start py-4 gap-3"
+    ):
         with ui.card().classes(
             "w-full max-w-xl bg-white shadow-sm border border-gray-200 rounded-lg px-6 py-5"
         ):
@@ -335,9 +369,9 @@ def survey_page(dialog, session_factory):
 
                 if is_last_static:
                     ui.button(
-                        "Next",
-                        on_click=lambda: _next_page(s, refresh),
-                    ).classes("bg-blue-600 text-white hover:bg-blue-700")
+                        "Submit",
+                        on_click=lambda: _finalize_static_block(s, refresh),
+                    ).classes("bg-green-600 text-white hover:bg-green-700")
                 elif is_truly_last:
                     ui.button(
                         "Submit",
@@ -351,9 +385,11 @@ def survey_page(dialog, session_factory):
 
 
 def render_survey_flow(session_factory, survey: dict[str, Any], survey_db_id: int, sid: str) -> None:
-    reset_survey_session(survey, survey_db_id, sid)
-
     with ui.dialog().props("maximized") as dialog:
+        reset_survey_session(survey, survey_db_id, sid)
+        st = _session()
+        st["_dialog"] = dialog
+        st["_session_factory"] = session_factory
         survey_page(dialog, session_factory)
 
     dialog.open()
@@ -369,7 +405,7 @@ def render_survey_entry_with_landing(
     Do not ``root.clear()`` before opening the dialog: the dialog can be a descendant of
     that column, and clearing it removes the dialog → blank page (especially on Railway).
     """
-    root = ui.column().classes("w-full min-h-screen bg-slate-50")
+    root = ui.column().classes("w-full bg-slate-50 items-stretch")
     landing_block = ui.column().classes("w-full")
 
     def proceed() -> None:

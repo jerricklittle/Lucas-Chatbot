@@ -1,3 +1,5 @@
+import secrets
+
 from sqlalchemy import String, Text, Boolean, Integer, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import Column
@@ -5,11 +7,18 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from Base import Base
 
+
+def generate_survey_public_id() -> str:
+    """Opaque, URL-safe token for public survey links (not sequential)."""
+    return secrets.token_urlsafe(16)
+
 class Survey(Base):
     """Survey model - represents a complete survey with metadata"""
     __tablename__ = "surveys"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    # Public URL token; internal integer id stays for FKs and admin routes.
+    public_id = Column(String(64), unique=True, nullable=True, index=True)
     name = Column(String(255), nullable=False)  # Survey name
     description = Column(Text, nullable=True)
     # Rich HTML (e.g. from ui.editor): instructions, informed consent summary, links — shown before questions.

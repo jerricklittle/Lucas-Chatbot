@@ -8,7 +8,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from Base import Base
-from survey_models import Survey, QuestionBank, SurveyQuestion
+from survey_models import Survey, QuestionBank, SurveyQuestion, generate_survey_public_id
 from user import User  # Import User so Base knows about users table
 
 # Database setup
@@ -26,14 +26,19 @@ def import_survey_from_json(filepath):
         data = json.load(f)
     
     session = Session()
-    
+
+    pid = generate_survey_public_id()
+    while session.query(Survey).filter(Survey.public_id == pid).first() is not None:
+        pid = generate_survey_public_id()
+
     # Create the survey
     survey = Survey(
         name=data.get('title', 'Imported Survey'),
         description=data.get('description', ''),
         created_by=None,  # NULL = default/global survey
         settings=data.get('settings', {}),
-        is_active=True
+        is_active=True,
+        public_id=pid,
     )
     session.add(survey)
     session.flush()  # Get survey.id

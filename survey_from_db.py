@@ -8,30 +8,50 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from responses import Response
 from survey_models import QuestionBank, Survey, SurveyQuestion
 
 
-def student_survey_access(session: Session, survey_id: int) -> tuple[dict[str, Any] | None, str | None]:
+def sid_already_submitted(session: Session, survey_db_id: int, sid: str) -> bool:
+    """True if this participant id already has a stored response for this survey."""
+    key = (sid or "").strip()
+    if not key:
+        return False
+    return (
+        session.query(Response.id)
+        .filter(Response.survey_id == survey_db_id, Response.sid == key)
+        .first()
+        is not None
+    )
+
+
+def student_survey_access(
+    session: Session, survey_public_id: str
+) -> tuple[dict[str, Any] | None, str | None, int | None]:
     """
     Enforce active survey, open/close window, and configured questions.
-    Returns (runtime_survey_dict, error_message). error_message is None when OK.
+    ``survey_public_id`` is the opaque token from the URL (not the internal integer PK).
+    Returns ``(payload, error_message, internal_db_id)``. ``internal_db_id`` is set only when ``payload`` is returned.
     """
-    row = session.query(Survey).filter_by(id=survey_id, is_active=True).first()
+    ref = (survey_public_id or "").strip()
+    if not ref:
+        return None, "This survey is not available.", None
+    row = session.query(Survey).filter_by(public_id=ref, is_active=True).first()
     if not row:
-        return None, "This survey is not available."
+        return None, "This survey is not available.", None
     now = datetime.utcnow()
     opens_at = getattr(row, "opens_at", None)
     closes_at = getattr(row, "closes_at", None)
     if opens_at and now < opens_at:
         t = opens_at.strftime("%Y-%m-%d %H:%M UTC")
-        return None, f"This survey is not open yet. It opens on {t}."
+        return None, f"This survey is not open yet. It opens on {t}.", None
     if closes_at and now > closes_at:
         t = closes_at.strftime("%Y-%m-%d %H:%M UTC")
-        return None, f"This survey has closed (as of {t} UTC) and is no longer accepting responses."
-    payload = load_survey_from_db(session, survey_id)
+        return None, f"This survey has closed (as of {t} UTC) and is no longer accepting responses.", None
+    payload = load_survey_from_db(session, row.id)
     if not payload:
-        return None, "This survey is not ready yet (no questions configured)."
-    return payload, None
+        return None, "This survey is not ready yet (no questions configured).", None
+    return payload, None, row.id
 
 
 def _question_bank_to_item(q: QuestionBank, sq: SurveyQuestion) -> dict[str, Any]:
@@ -100,9 +120,11 @@ def load_survey_from_db(session: Session, survey_id: int) -> dict[str, Any] | No
 
     landing = getattr(survey, "participant_landing_html", None) or ""
 
+    pub = (survey.public_id or "").strip() or str(survey.id)
+
     return {
         "schemaVersion": "1.0.0",
-        "id": str(survey.id),
+        "id": pub,
         "title": survey.name,
         "description": survey.description or "",
         "participant_landing_html": landing,

@@ -16,7 +16,7 @@ from sqlalchemy import create_engine, desc, func
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from Base import Base
-from survey_models import Survey, QuestionBank, SurveyQuestion
+from survey_models import Survey, QuestionBank, SurveyQuestion, generate_survey_public_id
 from user import User
 from app_config import get_public_base_url
 from authentication import (
@@ -444,6 +444,7 @@ def survey_list_page():
             with ui.card().classes('w-full'):
                 columns = [
                     {'name': 'id', 'label': 'ID', 'field': 'id', 'align': 'left'},
+                    {'name': 'public_id', 'label': 'Public link ID', 'field': 'public_id', 'align': 'left'},
                     {'name': 'name', 'label': 'Name', 'field': 'name', 'align': 'left'},
                     {'name': 'version', 'label': 'Version', 'field': 'version', 'align': 'center'},
                     {'name': 'updated', 'label': 'Last Updated', 'field': 'updated', 'align': 'left'},
@@ -452,8 +453,10 @@ def survey_list_page():
                 
                 rows = []
                 for s in surveys:
+                    pid = (s.public_id or '') or '—'
                     rows.append({
                         'id': s.id,
+                        'public_id': pid if len(pid) <= 28 else pid[:28] + '…',
                         'name': s.name,
                         'version': s.version,
                         'updated': s.updated_at.strftime('%Y-%m-%d %H:%M') if s.updated_at else '',
@@ -663,6 +666,9 @@ def create_survey_initial(
         settings['randomize'] = True
 
     session = Session()
+    pid = generate_survey_public_id()
+    while session.query(Survey).filter(Survey.public_id == pid).first() is not None:
+        pid = generate_survey_public_id()
     survey = Survey(
         name=name,
         description=description,
@@ -670,6 +676,7 @@ def create_survey_initial(
         participant_landing_html=_normalize_landing_html(participant_landing_html),
         opens_at=o,
         closes_at=c,
+        public_id=pid,
         created_by=get_current_user_id(),  # Set owner
     )
     session.add(survey)
@@ -1332,7 +1339,11 @@ def ir_survey_links_page(request: Request):
     """Generate personalized survey URLs (status, id, url) for the IR office."""
     base = get_public_base_url(request)
     session = Session()
-    surveys = session.query(Survey).filter_by(is_active=True).order_by(Survey.id).all()
+    surveys = [
+        s
+        for s in session.query(Survey).filter_by(is_active=True).order_by(Survey.id).all()
+        if s.public_id
+    ]
     session.close()
 
     with ui.column().classes('w-full max-w-4xl mx-auto p-8 gap-4'):
@@ -1368,7 +1379,10 @@ def ir_survey_links_page(request: Request):
         ).classes('text-gray-600 text-sm')
 
         if not surveys:
-            ui.label('No active surveys in the system.').classes('text-orange-600')
+            ui.label(
+                'No active surveys with a public link ID (restart the app once to run DB migration/backfill, '
+                'or create a new survey).'
+            ).classes('text-orange-600')
             return
 
         labels = [f'{s.id}: {s.name}' for s in surveys]
@@ -1378,7 +1392,7 @@ def ir_survey_links_page(request: Request):
             label='Survey',
         ).classes('w-full max-w-xl')
 
-        id_to_label = {f'{s.id}: {s.name}': s.id for s in surveys}
+        id_to_label = {f'{s.id}: {s.name}': s.public_id for s in surveys}
 
         ids_input = ui.textarea(
             label='Existing IDs to reuse (optional)',
@@ -1392,7 +1406,7 @@ def ir_survey_links_page(request: Request):
                 ui.notify('Set PUBLIC_BASE_URL or RAILWAY_PUBLIC_DOMAIN first', type='warning')
                 return
             label = survey_select.value
-            survey_id = id_to_label[label]
+            survey_public_id = id_to_label[label]
             raw = ids_input.value or ''
             tokens = []
             for chunk in raw.replace(',', '\n').split('\n'):
@@ -1412,18 +1426,19 @@ def ir_survey_links_page(request: Request):
             rows_out: list[list[str]] = [['status', 'id', 'url']]
             for t in ordered:
                 q = quote(t, safe='')
-                rows_out.append(['existing', t, f'{base}/survey/{survey_id}?sid={q}'])
+                rows_out.append(['existing', t, f'{base}/survey/{survey_public_id}?sid={q}'])
             for _ in range(n_new):
                 nid = secrets.token_urlsafe(18)
                 while nid in seen:
                     nid = secrets.token_urlsafe(18)
                 seen.add(nid)
                 qn = quote(nid, safe='')
-                rows_out.append(['new', nid, f'{base}/survey/{survey_id}?sid={qn}'])
+                rows_out.append(['new', nid, f'{base}/survey/{survey_public_id}?sid={qn}'])
             buf = io.StringIO()
             w = csv.writer(buf)
             w.writerows(rows_out)
-            ui.download(buf.getvalue().encode('utf-8'), f'sai_survey_{survey_id}_links.csv')
+            safe_stub = survey_public_id.replace('/', '_').replace('+', '-')[:48]
+            ui.download(buf.getvalue().encode('utf-8'), f'sai_survey_{safe_stub}_links.csv')
 
         ui.button('Download spreadsheet (CSV)', on_click=generate_csv).classes('bg-blue-600 text-white w-fit')
 
