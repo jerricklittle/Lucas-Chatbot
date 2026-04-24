@@ -509,17 +509,21 @@ def _open_import_survey_dialog() -> None:
             'Choose a JSON file. It will be imported as a brand new survey under your account.'
         ).classes('text-sm text-gray-600 mb-4')
 
-        def on_upload(e) -> None:
+        async def on_upload(e) -> None:
             try:
-                raw = e.content.read()
-                data = json.loads(raw.decode('utf-8'))
-            except Exception:
-                ui.notify('Could not read JSON file', type='negative')
+                raw = await e.file.read()
+                text = raw.decode('utf-8-sig')
+                data = json.loads(text)
+            except Exception as ex:
+                ui.notify(f'Could not read JSON file ({ex})', type='negative')
+                return
+            if not isinstance(data, dict):
+                ui.notify('JSON root must be an object', type='negative')
                 return
             try:
                 new_id = import_survey_json_dict(data)
-            except Exception:
-                ui.notify('Import failed (invalid JSON shape)', type='negative')
+            except Exception as ex:
+                ui.notify(f'Import failed: {ex}', type='negative')
                 return
             dialog.close()
             ui.notify('Survey imported', type='positive')
@@ -547,6 +551,11 @@ def import_survey_json_dict(data: dict) -> int:
     if not isinstance(questions, list) or not questions:
         raise ValueError('No questions')
 
+    q_items = [q for q in questions if isinstance(q, dict)]
+    if not q_items:
+        raise ValueError('No valid question objects')
+    q_items.sort(key=lambda x: (int(x.get('order') or 0), str(x.get('id') or '')))
+
     session = Session()
     try:
         pid = generate_survey_public_id()
@@ -558,6 +567,7 @@ def import_survey_json_dict(data: dict) -> int:
             description=description,
             settings=settings if isinstance(settings, dict) else {},
             participant_landing_html=_normalize_landing_html(landing_html),
+            version=int(data.get('surveyVersion') or 1),
             is_active=True,
             public_id=pid,
             created_by=get_current_user_id(),
@@ -565,12 +575,11 @@ def import_survey_json_dict(data: dict) -> int:
         session.add(survey)
         session.flush()  # get survey.id
 
-        for idx, q in enumerate(questions, 1):
-            if not isinstance(q, dict):
-                continue
+        for seq, q in enumerate(q_items, 1):
             qtype = str(q.get('type') or q.get('question_type') or 'text').strip()
             prompt = str(q.get('prompt') or q.get('question_text') or '').strip()
-            qid = str(q.get('id') or q.get('name') or f'q_{idx}').strip()
+            qid = str(q.get('id') or q.get('name') or f'q_{seq}').strip()
+            order_val = int(q.get('order') or seq)
 
             cfg: dict = {}
             if isinstance(q.get('tags'), list):
@@ -599,7 +608,7 @@ def import_survey_json_dict(data: dict) -> int:
                 SurveyQuestion(
                     survey_id=survey.id,
                     question_id=qb.id,
-                    order=idx,
+                    order=order_val,
                     is_adaptive=bool(q.get('adaptive') or q.get('is_adaptive') or False),
                 )
             )
