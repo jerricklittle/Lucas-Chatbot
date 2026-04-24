@@ -1183,8 +1183,16 @@ def survey_detail_page(survey_id: int):
         ui.label('Survey not found').classes('text-red-600')
         return
     
-    # Get questions in order
-    survey_questions = session.query(SurveyQuestion).filter_by(survey_id=survey_id).order_by(SurveyQuestion.order).all()
+    # Get questions in order (eager-load to avoid DetachedInstanceError after session close)
+    from sqlalchemy.orm import joinedload
+
+    survey_questions = (
+        session.query(SurveyQuestion)
+        .options(joinedload(SurveyQuestion.question))
+        .filter_by(survey_id=survey_id)
+        .order_by(SurveyQuestion.order)
+        .all()
+    )
     
     # Get all responses for this survey
     from responses import Response
@@ -1217,7 +1225,6 @@ def survey_detail_page(survey_id: int):
         if total_responses == 0:
             ui.label('No responses yet for this survey.').classes('text-gray-500 text-center py-8')
         else:
-            session = Session()
             for sq in survey_questions:
                 question = sq.question
                 question_name = question.name
@@ -1304,8 +1311,7 @@ def survey_detail_page(survey_id: int):
                     elif question_type == 'multi':
                         # Skip multi for now
                         ui.label('Multi-select responses (visualization coming soon)').classes('text-gray-500 italic')
-            
-            session.close()
+            # no DB session needed here; survey_questions were eager-loaded above
 
 
 @ui.refreshable
