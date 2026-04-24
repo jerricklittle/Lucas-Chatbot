@@ -167,18 +167,29 @@ def delete_question(question_id):
 
 
 @ui.page('/admin/questions/new')
-def question_new_page(return_survey_id: int = None):
+def question_new_page(request: Request):
     """Page 2 from mockups: Create new question"""
+    rid = (request.query_params.get('return_survey_id') or '').strip()
+    return_survey_id = int(rid) if rid.isdigit() else None
     question_form(None, return_survey_id)
 
 
 @ui.page('/admin/questions/edit/{question_id}')
-def question_edit_page(question_id: int):
+def question_edit_page(question_id: int, request: Request):
     """Page 2 from mockups: Edit existing question"""
+    rid = (request.query_params.get('return_survey_id') or '').strip()
+    return_survey_id = int(rid) if rid.isdigit() else None
     session = Session()
     question = session.query(QuestionBank).filter_by(id=question_id).first()
     session.close()
-    question_form(question, None)
+    if not question:
+        ui.notify('Question not found', type='negative')
+        if return_survey_id:
+            ui.navigate.to(f'/admin/surveys/edit/{return_survey_id}')
+        else:
+            ui.navigate.to('/admin/questions')
+        return
+    question_form(question, return_survey_id)
 
 
 def question_form(question=None, return_survey_id=None):
@@ -986,9 +997,10 @@ def questions_list_display(survey_id):
     for sq in survey_questions:
         questions_data.append({
             'id': sq.id,
+            'question_bank_id': sq.question_id,
             'order': sq.order,
             'name': sq.question.name,
-            'text': sq.question.question_text
+            'text': sq.question.question_text,
         })
     
     session.close()
@@ -1000,7 +1012,13 @@ def questions_list_display(survey_id):
                     with ui.column():
                         ui.label(f'{q_data["order"]}. {q_data["name"]}').classes('font-semibold')
                         ui.label(q_data["text"][:80] + '...' if len(q_data["text"]) > 80 else q_data["text"]).classes('text-sm text-gray-600')
-                    with ui.row().classes('gap-2'):
+                    with ui.row().classes('gap-2 items-center'):
+                        ui.button(
+                            'Edit',
+                            on_click=lambda qb_id=q_data['question_bank_id'], sid=survey_id: ui.navigate.to(
+                                f'/admin/questions/edit/{qb_id}?return_survey_id={sid}'
+                            ),
+                        ).props('flat dense no-caps').classes('text-blue-700')
                         # Capture sq.id in default argument to avoid closure issue
                         ui.button(icon='arrow_upward', on_click=lambda sq_id=q_data['id']: move_question_up(sq_id)).props('flat round dense')
                         ui.button(icon='arrow_downward', on_click=lambda sq_id=q_data['id']: move_question_down(sq_id)).props('flat round dense')
