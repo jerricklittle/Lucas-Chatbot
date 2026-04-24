@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from nicegui import ui
+from nicegui import context, ui
 from sqlalchemy.exc import IntegrityError
 
 from Question_Timer import Question_Timer
@@ -22,8 +22,6 @@ _survey_sessions: dict[str, dict[str, Any]] = {}
 
 
 def _cid() -> str:
-    from nicegui import context
-
     return str(context.client.id)
 
 
@@ -151,13 +149,18 @@ def _queue_submit(s: dict[str, Any]) -> None:
     if dialog is None or session_factory is None:
         return
 
+    client = s.get("_nicegui_client") or context.client
+
     def _run() -> None:
         submit_survey(dialog, session_factory, s)
 
-    ui.timer(0.05, _run, once=True)
+    # ui.timer must be created inside a client slot; async tasks have no slot after await.
+    with client:
+        ui.timer(0.05, _run, once=True)
 
 
 async def _generate_dynamic_questions(s: dict[str, Any], refresh_fn) -> None:
+    client = s.get("_nicegui_client") or context.client
     text_responses = []
     survey = s["survey"]
     for q_id, answer in s["answers"].items():
@@ -203,13 +206,26 @@ async def _generate_dynamic_questions(s: dict[str, Any], refresh_fn) -> None:
     if s["survey_state"]["mode"] == "complete":
         _queue_submit(s)
     else:
-        refresh_fn()
+        with client:
+            refresh_fn()
 
 
 def _finalize_static_block(s: dict[str, Any], refresh_fn) -> None:
+    s["_nicegui_client"] = context.client
     s["survey_state"]["mode"] = "loading"
     refresh_fn()
-    asyncio.create_task(_generate_dynamic_questions(s, refresh_fn))
+    task = asyncio.create_task(_generate_dynamic_questions(s, refresh_fn))
+
+    def _consume_task_exc(t: asyncio.Task) -> None:
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            import logging
+
+            logging.getLogger(__name__).error("Survey follow-up step failed", exc_info=exc)
+
+    task.add_done_callback(_consume_task_exc)
 
 
 def _next_page(s: dict[str, Any], refresh_fn) -> None:
@@ -390,6 +406,7 @@ def render_survey_flow(session_factory, survey: dict[str, Any], survey_db_id: in
         st = _session()
         st["_dialog"] = dialog
         st["_session_factory"] = session_factory
+        st["_nicegui_client"] = context.client
         survey_page(dialog, session_factory)
 
     dialog.open()
