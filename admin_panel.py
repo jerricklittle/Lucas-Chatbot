@@ -7,6 +7,7 @@ import csv
 import io
 import json
 import os
+import re
 import secrets
 from urllib.parse import quote
 
@@ -57,6 +58,20 @@ def _parse_datetime_local(raw: str | None):
         return datetime.strptime(s, '%Y-%m-%dT%H:%M')
     except ValueError:
         return None
+
+
+def _survey_download_filename(survey_id: int, survey_name: str, *, kind: str) -> str:
+    """``kind``: ``'results'`` → CSV, ``'template'`` → JSON survey definition."""
+    ts = datetime.utcnow().strftime('%Y-%m-%d_%H%M%S')
+    raw = (survey_name or '').strip() or 'survey'
+    safe = re.sub(r'[^\w\-.]+', '_', raw, flags=re.UNICODE)
+    safe = re.sub(r'_+', '_', safe).strip('._')[:80] or 'survey'
+    sid = int(survey_id)
+    if kind == 'results':
+        return f'survey_{sid}_{safe}_{ts}_results.csv'
+    if kind == 'template':
+        return f'survey_{sid}_{safe}_{ts}_template.json'
+    raise ValueError(f'unknown export kind: {kind!r}')
 
 
 _USER_LIST_PAGER = {'page': 1, 'per_page': 10}
@@ -661,13 +676,17 @@ def export_survey_template_json(survey_id: int) -> None:
     """Export survey definition (template JSON) for download / re-import."""
     session = Session()
     try:
+        survey_row = session.query(Survey).filter_by(id=int(survey_id)).first()
+        friendly = (survey_row.name if survey_row else '') or ''
         payload = load_survey_from_db(session, int(survey_id))
         if not payload:
             ui.notify('Survey not available for export', type='negative')
             return
-        name = (payload.get('title') or f'survey_{survey_id}').strip().replace(' ', '_')
+        if not friendly:
+            friendly = str(payload.get('title') or '').strip()
         body = json.dumps(payload, indent=2, ensure_ascii=False)
-        ui.download(body.encode('utf-8'), f'{name}.json')
+        fn = _survey_download_filename(survey_id, friendly, kind='template')
+        ui.download(body.encode('utf-8'), fn)
     finally:
         session.close()
 
@@ -789,6 +808,9 @@ def export_survey_results_csv(survey_id: int) -> None:
 
     sess = Session()
     try:
+        survey_row = sess.query(Survey).filter_by(id=int(survey_id)).first()
+        friendly = (survey_row.name if survey_row else '') or f'id_{int(survey_id)}'
+
         # Map static question ids (QuestionBank.name) -> prompt text, in survey order
         sq_rows = (
             sess.query(SurveyQuestion)
@@ -938,7 +960,8 @@ def export_survey_results_csv(survey_id: int) -> None:
             out[dyn_header] = item.get('dynamic_questions', '')
             w.writerow(out)
 
-        ui.download(buf.getvalue().encode('utf-8'), f'survey_{int(survey_id)}_results.csv')
+        fn = _survey_download_filename(survey_id, friendly, kind='results')
+        ui.download(buf.getvalue().encode('utf-8'), fn)
     finally:
         sess.close()
 
