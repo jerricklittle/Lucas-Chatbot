@@ -1,8 +1,8 @@
 from openai import AsyncOpenAI
 import os
 
-
-adaptive_prompt = """
+# Default instructor/decision rules (used in admin UI when adaptive is enabled and as AI fallback when prompt_text is empty).
+DEFAULT_ADAPTIVE_PROMPT_TEXT = """
 You are an instructor collecting constructive, actionable feedback to improve a course.
 
 Given the student's response, decide whether asking follow-up questions would provide
@@ -32,7 +32,10 @@ Generation rules:
   the student's answer.
 - Each follow-up question should explore a new angle or clarify an
   implication of the response.
+""".strip()
 
+# Fixed JSON contract (always appended to the system message).
+ADAPTIVE_FOLLOWUP_OUTPUT_SPEC = """
 Output rules:
 - If follow-up questions are needed, set "needs_followup" to true.
 - If no follow-up questions are needed, set "needs_followup" to false and
@@ -57,89 +60,73 @@ Return JSON in exactly the following format:
     }
   ]
 }
-"""
+""".strip()
+
+# Full legacy system prompt (default instructor text + output spec).
+adaptive_prompt = f"{DEFAULT_ADAPTIVE_PROMPT_TEXT}\n\n{ADAPTIVE_FOLLOWUP_OUTPUT_SPEC}"
+
+FOLLOWUP_SYSTEM_PREAMBLE = """You help analyze open-ended survey responses and propose optional follow-up questions.
+Each numbered response below begins with an "Instructor context" section. Apply that guidance only when deciding whether follow-ups are needed for that specific response, and when phrasing follow-up questions for that response.
+""".strip()
+
+
+def _effective_prompt_text(response: dict) -> str:
+    raw = response.get("prompt_text")
+    if raw is None:
+        return DEFAULT_ADAPTIVE_PROMPT_TEXT
+    text = str(raw).strip()
+    return text if text else DEFAULT_ADAPTIVE_PROMPT_TEXT
 
 
 async def analyze_all_responses_for_survey(text_responses):
     """
     Analyzes multiple student text responses at once and generates
     follow-up questions for all of them in a single GPT call.
-    
+
     Args:
-        text_responses: List of dicts with keys: question_id, text, prompt
-        
+        text_responses: List of dicts with keys: question_id, text, prompt,
+            and optional prompt_text (instructor instructions for the model;
+            empty or missing uses DEFAULT_ADAPTIVE_PROMPT_TEXT).
+
     Returns:
         JSON string with needs_followup and followup_questions array
     """
     client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    
-    # Build a structured prompt that includes all responses
+
+    system_content = f"{FOLLOWUP_SYSTEM_PREAMBLE}\n\n{ADAPTIVE_FOLLOWUP_OUTPUT_SPEC}"
+
     combined_text = "The student provided the following responses:\n\n"
-    
+
     for i, response in enumerate(text_responses, 1):
+        instructor = _effective_prompt_text(response)
         combined_text += f"Response {i}:\n"
+        combined_text += f"Instructor context (for this response only):\n{instructor}\n\n"
         combined_text += f"Original Question: {response['prompt']}\n"
         combined_text += f"Question ID: {response['question_id']}\n"
         combined_text += f"Student Answer: {response['text']}\n\n"
-    
-    combined_text += "\nBased on ALL of the above responses, generate follow-up questions where appropriate. "
-    combined_text += "Include the source_question_id field in each follow-up to indicate which response it's addressing."
-    
+
+    combined_text += (
+        "\nBased on ALL of the above responses, generate follow-up questions where appropriate. "
+        "Respect each response's Instructor context only for that response. "
+        "Include the source_question_id field in each follow-up to indicate which response it's addressing."
+    )
+
     response = await client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": adaptive_prompt},
-            {"role": "user", "content": combined_text}
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": combined_text},
         ],
         temperature=0.2,
     )
-    
-    # Get the raw response
+
     raw_response = response.choices[0].message.content
     cleaned_response = raw_response.strip()
-    if cleaned_response.startswith('```json'):
-        cleaned_response = cleaned_response[7:]  # Remove ```json
-    if cleaned_response.startswith('```'):
-        cleaned_response = cleaned_response[3:]  # Remove ```
-    if cleaned_response.endswith('```'):
-        cleaned_response = cleaned_response[:-3]  # Remove trailing ```
-    
+    if cleaned_response.startswith("```json"):
+        cleaned_response = cleaned_response[7:]
+    if cleaned_response.startswith("```"):
+        cleaned_response = cleaned_response[3:]
+    if cleaned_response.endswith("```"):
+        cleaned_response = cleaned_response[:-3]
+
     return cleaned_response.strip()
-
-
-# async def analyze_response_for_survey(text):
-#     """
-#     Legacy function - analyzes a single response.
-#     This is kept for backwards compatibility but is no longer used
-#     in the main survey flow.
-#     """
-#     client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    
-#     response = await client.chat.completions.create(
-#         model="gpt-4o",
-#         messages=[
-#             {"role": "system", "content": adaptive_prompt},
-#             {"role": "user", "content": text}
-#         ],
-#         temperature=0.2,
-#     )
-    
-#     return response.choices[0].message.content
-
-
-# async def ask_chatbot(prompt, system_role=adaptive_prompt):
-#     """
-#     General purpose chatbot function for custom prompts.
-#     """
-#     client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    
-#     response = await client.chat.completions.create(
-#         model="gpt-4o",
-#         messages=[
-#             {"role": "system", "content": system_role},
-#             {"role": "user", "content": prompt}
-#         ],
-#         temperature=0.7
-#     )
-    
-#     return response.choices[0].message.content

@@ -21,6 +21,7 @@ from Base import Base
 from survey_models import Survey, QuestionBank, SurveyQuestion, generate_survey_public_id
 from user import User
 from survey_from_db import load_survey_from_db
+from chatbot import DEFAULT_ADAPTIVE_PROMPT_TEXT
 from app_config import get_public_base_url
 from authentication import (
     is_admin,
@@ -204,7 +205,11 @@ def question_form(question=None, return_survey_id=None):
         'type': question.question_type if is_edit else 'likert',
         'config': copy.deepcopy(question.config) if is_edit and getattr(question, 'config', None) else {},
     }
-    
+    if is_edit and form_state['type'] == 'text':
+        _cfg = form_state['config']
+        if _cfg.get('adaptive') and not str(_cfg.get('prompt_text') or '').strip():
+            _cfg['prompt_text'] = DEFAULT_ADAPTIVE_PROMPT_TEXT
+
     with ui.column().classes('w-full max-w-2xl mx-auto p-8'):
         # Header
         ui.label('Edit Question' if is_edit else 'New Question').classes('text-3xl font-bold mb-6')
@@ -362,7 +367,10 @@ def question_form(question=None, return_survey_id=None):
 
                 def on_adaptive_change(e):
                     cfg['adaptive'] = bool(e.value)
+                    if cfg['adaptive'] and not str(cfg.get('prompt_text') or '').strip():
+                        cfg['prompt_text'] = DEFAULT_ADAPTIVE_PROMPT_TEXT
                     prompt_holder.set_visibility(cfg['adaptive'])
+                    adaptive_followup_section.refresh()
 
                 ad_cb.on('change', on_adaptive_change)
 

@@ -247,6 +247,7 @@ async def _generate_dynamic_questions(s: dict[str, Any], refresh_fn) -> None:
                             "question_id": q_id,
                             "text": text_value,
                             "prompt": original_q["prompt"],
+                            "prompt_text": original_q.get("prompt_text"),
                         }
                     )
 
