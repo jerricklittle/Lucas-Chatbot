@@ -180,15 +180,9 @@ def consent_page():
             ui.label("Informed consent — summary").classes("text-2xl font-bold text-slate-900 mb-4")
             ui.markdown(
                 """
-Participation is voluntary. You may skip questions or stop at any time. Responses are
-used for research and quality improvement under protocols approved by the university.
-
-**Who sees your answers:** authorized researchers and institutional research staff, under
-FERPA and local policy. This system stores survey responses linked to a **pseudonymous
-identifier** supplied by the institution's research office, not your email or university ID.
-
-For the full consent language and data retention details, use the official document
-linked from the project home page when the IR office provides it.
+By submitting this survey, you acknowledge that you are providing your responses voluntarily and consent to the collection of the data you provide. Your participation in this survey is completely voluntary, and you may choose to exit the survey at any time without any negative consequences.
+Please note that the responses you provide will only be used for research purposes and will remain confidential. This survey does not collect any identifying information. 
+The link provided is unique to you, please do not share it with others. This email and link was sent through the Institutional Research department, providing two layers of anonymity between you and the researchers.
 """
             ).classes("text-slate-700 leading-relaxed")
             if external:
