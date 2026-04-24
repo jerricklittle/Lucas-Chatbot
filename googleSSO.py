@@ -102,6 +102,10 @@ async def google_callback(request: Request):
             session.add(user)
             session.commit()
 
+        if not user.is_active:
+            session.close()
+            return RedirectResponse(url="/login?error=inactive")
+
         user.last_login = datetime.utcnow()
 
         user_id = user.id

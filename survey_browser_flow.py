@@ -365,24 +365,30 @@ def render_survey_entry_with_landing(
     """
     Optional HTML landing (instructions, consent) before opening the maximized survey dialog.
     Content is authored by staff in the admin survey editor (trusted HTML).
+
+    Do not ``root.clear()`` before opening the dialog: the dialog can be a descendant of
+    that column, and clearing it removes the dialog → blank page (especially on Railway).
     """
     root = ui.column().classes("w-full min-h-screen bg-slate-50")
+    landing_block = ui.column().classes("w-full")
 
     def proceed() -> None:
-        root.clear()
+        landing_block.visible = False
         render_survey_flow(session_factory, survey, survey_db_id, sid)
 
     landing = (survey.get("participant_landing_html") or "").strip()
     with root:
-        if landing:
-            with ui.column().classes("max-w-3xl mx-auto w-full px-4 py-8 gap-6"):
-                ui.label(survey.get("title", "Survey")).classes("text-2xl font-bold text-slate-900")
-                ui.html(landing, sanitize=False).classes(
-                    "survey-landing text-slate-800 text-base leading-relaxed [&_a]:text-blue-700 [&_a]:underline"
-                )
-                ui.button(
-                    "Continue to the survey",
-                    on_click=proceed,
-                ).classes("bg-blue-700 text-white px-6 py-2 rounded-lg w-fit")
-        else:
-            ui.timer(0.05, proceed, once=True)
+        with landing_block:
+            if landing:
+                with ui.column().classes("max-w-3xl mx-auto w-full px-4 py-8 gap-6"):
+                    ui.label(survey.get("title", "Survey")).classes("text-2xl font-bold text-slate-900")
+                    ui.html(landing, sanitize=False).classes(
+                        "survey-landing text-slate-800 text-base leading-relaxed [&_a]:text-blue-700 [&_a]:underline"
+                    )
+                    ui.button(
+                        "Continue to the survey",
+                        on_click=proceed,
+                    ).classes("bg-blue-700 text-white px-6 py-2 rounded-lg w-fit")
+            else:
+                landing_block.visible = False
+                ui.timer(0.05, lambda: render_survey_flow(session_factory, survey, survey_db_id, sid), once=True)

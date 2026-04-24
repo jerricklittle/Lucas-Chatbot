@@ -3,11 +3,35 @@
 from __future__ import annotations
 
 import random
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from survey_models import QuestionBank, Survey, SurveyQuestion
+
+
+def student_survey_access(session: Session, survey_id: int) -> tuple[dict[str, Any] | None, str | None]:
+    """
+    Enforce active survey, open/close window, and configured questions.
+    Returns (runtime_survey_dict, error_message). error_message is None when OK.
+    """
+    row = session.query(Survey).filter_by(id=survey_id, is_active=True).first()
+    if not row:
+        return None, "This survey is not available."
+    now = datetime.utcnow()
+    opens_at = getattr(row, "opens_at", None)
+    closes_at = getattr(row, "closes_at", None)
+    if opens_at and now < opens_at:
+        t = opens_at.strftime("%Y-%m-%d %H:%M UTC")
+        return None, f"This survey is not open yet. It opens on {t}."
+    if closes_at and now > closes_at:
+        t = closes_at.strftime("%Y-%m-%d %H:%M UTC")
+        return None, f"This survey has closed (as of {t} UTC) and is no longer accepting responses."
+    payload = load_survey_from_db(session, survey_id)
+    if not payload:
+        return None, "This survey is not ready yet (no questions configured)."
+    return payload, None
 
 
 def _question_bank_to_item(q: QuestionBank, sq: SurveyQuestion) -> dict[str, Any]:

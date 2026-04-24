@@ -23,31 +23,35 @@ Session = sessionmaker(bind=engine)
 Base.metadata.create_all(engine)
 
 
-def _ensure_survey_participant_landing_column() -> None:
-    """Add participant_landing_html to existing Postgres/SQLite DBs (create_all does not alter tables)."""
+def _ensure_survey_extra_columns() -> None:
+    """Add columns missing on older DBs (create_all does not alter existing tables)."""
     from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError
 
     insp = inspect(engine)
     if not insp.has_table("surveys"):
         return
     cols = {c["name"] for c in insp.get_columns("surveys")}
-    if "participant_landing_html" in cols:
-        return
-    with engine.begin() as conn:
+    specs = [
+        ("participant_landing_html", "TEXT"),
+        ("opens_at", "TIMESTAMP"),
+        ("closes_at", "TIMESTAMP"),
+    ]
+    for name, sql_type in specs:
+        if name in cols:
+            continue
         if engine.dialect.name == "postgresql":
-            conn.execute(
-                text("ALTER TABLE surveys ADD COLUMN IF NOT EXISTS participant_landing_html TEXT")
-            )
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE surveys ADD COLUMN IF NOT EXISTS {name} {sql_type}"))
         else:
-            from sqlalchemy.exc import OperationalError
-
             try:
-                conn.execute(text("ALTER TABLE surveys ADD COLUMN participant_landing_html TEXT"))
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE surveys ADD COLUMN {name} {sql_type}"))
             except OperationalError:
                 pass
 
 
-_ensure_survey_participant_landing_column()
+_ensure_survey_extra_columns()
 
 import googleSSO  # noqa: E402, F401
 import authentication  # noqa: E402, F401
@@ -55,7 +59,7 @@ import admin_panel  # noqa: E402, F401
 
 from app_config import get_informed_consent_url  # noqa: E402
 from survey_browser_flow import render_survey_entry_with_landing  # noqa: E402
-from survey_from_db import load_survey_from_db  # noqa: E402
+from survey_from_db import student_survey_access  # noqa: E402
 
 TEAM = [
     ("Research team", "Principal investigator and instrument design"),
@@ -162,17 +166,17 @@ def student_survey_entry(survey_id: int, request: Request):
 
     db_session = Session()
     try:
-        survey = load_survey_from_db(db_session, survey_id)
+        survey, access_error = student_survey_access(db_session, survey_id)
     finally:
         db_session.close()
 
-    if not survey:
+    if access_error:
         with ui.column().classes(
             "w-full min-h-screen bg-slate-100 flex flex-col items-center justify-center px-6"
         ):
             with ui.card().classes("max-w-lg w-full p-8 text-center"):
-                ui.label("Survey not available").classes("text-xl font-bold text-slate-900 mb-2")
-                ui.label("This survey may be inactive or does not exist.").classes("text-slate-600")
+                ui.label("Survey unavailable").classes("text-xl font-bold text-slate-900 mb-2")
+                ui.label(access_error).classes("text-slate-600")
                 ui.button("Project home", on_click=lambda: ui.navigate.to("/")).classes("mt-6")
         return
 

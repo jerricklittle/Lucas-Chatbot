@@ -10,20 +10,23 @@ import os
 import secrets
 from urllib.parse import quote
 
-from nicegui import ui
+from nicegui import app, ui
 from starlette.requests import Request
-from sqlalchemy import create_engine, desc
+from sqlalchemy import create_engine, desc, func
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from Base import Base
 from survey_models import Survey, QuestionBank, SurveyQuestion
+from user import User
 from app_config import get_public_base_url
 from authentication import (
     is_admin,
     is_ir,
+    is_project_admin,
     can_access_ir_tools,
     get_current_user,
     get_current_user_id,
+    get_current_user_role,
     logout_user,
 )
 from dotenv import load_dotenv
@@ -37,6 +40,41 @@ Session = sessionmaker(bind=engine)
 
 # Create all tables
 Base.metadata.create_all(engine)
+
+
+def _fmt_datetime_local(dt) -> str:
+    if dt is None:
+        return ''
+    return dt.strftime('%Y-%m-%dT%H:%M')
+
+
+def _parse_datetime_local(raw: str | None):
+    if raw is None or not str(raw).strip():
+        return None
+    s = str(raw).strip()[:16]
+    try:
+        return datetime.strptime(s, '%Y-%m-%dT%H:%M')
+    except ValueError:
+        return None
+
+
+_USER_LIST_PAGER = {'page': 1, 'per_page': 10}
+_USER_LIST_SEARCH = {'q': ''}
+
+
+def _user_search_filter(query, q: str):
+    """Case-insensitive email substring; escape LIKE metacharacters in ``q``."""
+    t = (q or '').strip()
+    if not t:
+        return query
+    escaped = (
+        t.replace('\\', '\\\\')
+        .replace('%', '\\%')
+        .replace('_', '\\_')
+        .lower()
+    )
+    pat = f'%{escaped}%'
+    return query.filter(func.lower(User.email).like(pat, escape='\\'))
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -494,6 +532,19 @@ def survey_edit_form(survey=None):
                 value=_existing_landing if _existing_landing else _landing_default,
             ).classes('w-full border border-gray-200 rounded').style('min-height: 280px')
 
+            ui.label('Survey window (optional, UTC)').classes('text-lg font-semibold mt-6 mb-1')
+            ui.label(
+                'Leave blank for no limit. Times are interpreted as UTC and shown to participants in UTC.'
+            ).classes('text-sm text-gray-500 mb-2')
+            _opens = _fmt_datetime_local(survey.opens_at) if is_edit and getattr(survey, 'opens_at', None) else ''
+            _closes = _fmt_datetime_local(survey.closes_at) if is_edit and getattr(survey, 'closes_at', None) else ''
+            opens_input = ui.input('Opens at (UTC)', value=_opens).props('type=datetime-local').classes(
+                'w-full max-w-md'
+            )
+            closes_input = ui.input('Closes at (UTC)', value=_closes).props('type=datetime-local').classes(
+                'w-full max-w-md'
+            )
+
             # Randomization settings
             ui.label('Randomization Settings').classes('text-lg font-semibold mt-4 mb-2')
             
@@ -510,6 +561,8 @@ def survey_edit_form(survey=None):
                     desc_input.value,
                     randomize_enabled.value,
                     landing_editor.value,
+                    opens_input.value,
+                    closes_input.value,
                 )).classes('bg-blue-600 text-white mt-4')
             else:
                 ui.button('Update Details', on_click=lambda: update_survey_details(
@@ -518,6 +571,8 @@ def survey_edit_form(survey=None):
                     desc_input.value,
                     randomize_enabled.value,
                     landing_editor.value,
+                    opens_input.value,
+                    closes_input.value,
                 )).classes('bg-blue-600 text-white mt-4')
         
         # Questions section (only show if editing existing survey)
@@ -579,10 +634,28 @@ def _normalize_landing_html(html: str | None) -> str | None:
     return str(html)
 
 
-def create_survey_initial(name, description, randomize, participant_landing_html=None):
+def create_survey_initial(
+    name,
+    description,
+    randomize,
+    participant_landing_html=None,
+    opens_at_raw=None,
+    closes_at_raw=None,
+):
     """Create initial survey"""
     if not name.strip():
         ui.notify('Survey name is required', type='negative')
+        return
+
+    o = _parse_datetime_local(opens_at_raw)
+    c = _parse_datetime_local(closes_at_raw)
+    if (opens_at_raw and str(opens_at_raw).strip() and o is None) or (
+        closes_at_raw and str(closes_at_raw).strip() and c is None
+    ):
+        ui.notify('Invalid open/close datetime (use the picker format, UTC).', type='negative')
+        return
+    if o and c and c <= o:
+        ui.notify('Close time must be after open time.', type='negative')
         return
 
     settings = {}
@@ -595,6 +668,8 @@ def create_survey_initial(name, description, randomize, participant_landing_html
         description=description,
         settings=settings,
         participant_landing_html=_normalize_landing_html(participant_landing_html),
+        opens_at=o,
+        closes_at=c,
         created_by=get_current_user_id(),  # Set owner
     )
     session.add(survey)
@@ -606,13 +681,34 @@ def create_survey_initial(name, description, randomize, participant_landing_html
     ui.navigate.to(f'/admin/surveys/edit/{survey_id}')
 
 
-def update_survey_details(survey_id, name, description, randomize, participant_landing_html=None):
+def update_survey_details(
+    survey_id,
+    name,
+    description,
+    randomize,
+    participant_landing_html=None,
+    opens_at_raw=None,
+    closes_at_raw=None,
+):
     """Update survey metadata"""
+    o = _parse_datetime_local(opens_at_raw)
+    c = _parse_datetime_local(closes_at_raw)
+    if (opens_at_raw and str(opens_at_raw).strip() and o is None) or (
+        closes_at_raw and str(closes_at_raw).strip() and c is None
+    ):
+        ui.notify('Invalid open/close datetime (use the picker format, UTC).', type='negative')
+        return
+    if o and c and c <= o:
+        ui.notify('Close time must be after open time.', type='negative')
+        return
+
     session = Session()
     survey = session.query(Survey).filter_by(id=survey_id).first()
     survey.name = name
     survey.description = description
     survey.participant_landing_html = _normalize_landing_html(participant_landing_html)
+    survey.opens_at = o
+    survey.closes_at = c
 
     settings = survey.settings or {}
     if randomize:
@@ -783,6 +879,13 @@ def admin_home():
             with ui.card().classes('w-64 p-6 cursor-pointer hover:shadow-lg').on('click', lambda: ui.navigate.to('/admin/ir/links')):
                 ui.label('🔗 IR links').classes('text-2xl font-bold')
                 ui.label('Personalized student URLs (CSV)').classes('text-gray-600')
+
+            if is_project_admin():
+                with ui.card().classes('w-64 p-6 cursor-pointer hover:shadow-lg').on(
+                    'click', lambda: ui.navigate.to('/admin/users')
+                ):
+                    ui.label('👤 Users').classes('text-2xl font-bold')
+                    ui.label('Roles and accounts').classes('text-gray-600')
 
 
 @ui.page('/admin/questions')
@@ -1015,6 +1118,214 @@ def survey_detail_page(survey_id: int):
                         ui.label('Multi-select responses (visualization coming soon)').classes('text-gray-500 italic')
             
             session.close()
+
+
+@ui.refreshable
+def users_list_page_refreshable():
+    if not is_project_admin():
+        return
+
+    session = Session()
+    qtext = _USER_LIST_SEARCH.get('q', '').strip()
+    base = session.query(User)
+    base = _user_search_filter(base, qtext)
+    total = base.count()
+    per = _USER_LIST_PAGER['per_page']
+    page = _USER_LIST_PAGER['page']
+    max_page = max(1, (total + per - 1) // per) if total else 1
+    if page > max_page:
+        _USER_LIST_PAGER['page'] = max_page
+        page = max_page
+
+    rows_data = (
+        base.order_by(User.id.asc())
+        .offset((page - 1) * per)
+        .limit(per)
+        .all()
+    )
+    session.close()
+
+    rows = []
+    for u in rows_data:
+        rows.append(
+            {
+                'id': u.id,
+                'email': u.email,
+                'role': u.role,
+                'is_active': bool(u.is_active),
+                'last_login': u.last_login.strftime('%Y-%m-%d %H:%M') if u.last_login else '—',
+                'actions': u.id,
+            }
+        )
+
+    with ui.column().classes('w-full max-w-5xl mx-auto p-8'):
+        with ui.row().classes('w-full justify-between items-center mb-6'):
+            ui.label('User accounts').classes('text-3xl font-bold')
+            with ui.row().classes('gap-2'):
+                ui.button('← Admin home', on_click=lambda: ui.navigate.to('/admin')).classes('bg-gray-500 text-white')
+                ui.button('Logout', on_click=lambda: ui.navigate.to('/logout')).classes('bg-red-600 text-white')
+
+        with ui.row().classes('w-full gap-2 items-end mb-4 flex-wrap'):
+            search_input = ui.input(
+                'Search email',
+                value=_USER_LIST_SEARCH['q'],
+                placeholder='Substring match (case-insensitive)',
+            ).classes('flex-grow min-w-[14rem] max-w-xl')
+
+            def apply_search():
+                _USER_LIST_SEARCH['q'] = (search_input.value or '').strip()
+                _USER_LIST_PAGER['page'] = 1
+                users_list_page_refreshable.refresh()
+
+            def clear_search():
+                _USER_LIST_SEARCH['q'] = ''
+                _USER_LIST_PAGER['page'] = 1
+                users_list_page_refreshable.refresh()
+
+            ui.button('Search', on_click=apply_search).classes('bg-blue-600 text-white')
+            ui.button('Clear', on_click=clear_search).classes('bg-gray-400 text-white')
+
+        search_input.on('keydown.enter', lambda: apply_search())
+
+        match_note = f' matching “{qtext}”' if qtext else ''
+        ui.label(f'{total} user(s){match_note}').classes('text-sm text-gray-600 mb-4')
+
+        def set_page(p: int):
+            _USER_LIST_PAGER['page'] = max(1, min(max_page, p))
+            users_list_page_refreshable.refresh()
+
+        def set_per(e):
+            _USER_LIST_PAGER['per_page'] = int(e.value)
+            _USER_LIST_PAGER['page'] = 1
+            users_list_page_refreshable.refresh()
+
+        def handle_toggle_active(evt):
+            args = evt.args
+            if not isinstance(args, (list, tuple)) or len(args) < 2:
+                return
+            uid, new_val = int(args[0]), bool(args[1])
+            if uid == get_current_user_id() and not new_val:
+                ui.notify('You cannot deactivate your own account.', type='warning')
+                users_list_page_refreshable.refresh()
+                return
+            sess = Session()
+            u = sess.query(User).filter_by(id=uid).first()
+            if u:
+                u.is_active = new_val
+                sess.commit()
+            sess.close()
+            ui.notify('Active status updated', type='positive')
+            users_list_page_refreshable.refresh()
+
+        with ui.row().classes('gap-4 items-center mb-4 flex-wrap'):
+            ui.select([10, 25, 50, 100], value=per, label='Rows per page', on_change=set_per).classes('w-40')
+            ui.label(f'Page {page} / {max_page}').classes('text-sm text-gray-600')
+            ui.button('Previous', on_click=lambda: set_page(page - 1)).classes(
+                'bg-gray-200' if page > 1 else 'opacity-40'
+            )
+            ui.button('Next', on_click=lambda: set_page(page + 1)).classes(
+                'bg-gray-200' if page < max_page else 'opacity-40'
+            )
+
+        if not rows:
+            ui.label('No users match this search.' if qtext else 'No users yet.').classes('text-gray-500')
+            return
+
+        columns = [
+            {'name': 'id', 'label': 'ID', 'field': 'id', 'align': 'left'},
+            {'name': 'email', 'label': 'Email', 'field': 'email', 'align': 'left'},
+            {'name': 'role', 'label': 'Role', 'field': 'role', 'align': 'left'},
+            {'name': 'is_active', 'label': 'Active', 'field': 'is_active', 'align': 'center'},
+            {'name': 'last_login', 'label': 'Last login (UTC)', 'field': 'last_login', 'align': 'left'},
+            {'name': 'actions', 'label': '', 'field': 'actions', 'align': 'center'},
+        ]
+        table = ui.table(columns=columns, rows=rows, row_key='id').classes('w-full')
+        table.add_slot(
+            'body-cell-is_active',
+            '''
+            <q-td :props="props">
+                <q-toggle
+                    dense
+                    :model-value="props.row.is_active"
+                    @update:model-value="val => $parent.$emit('toggle_active', props.row.id, val)"
+                />
+            </q-td>
+        ''',
+        )
+        table.on('toggle_active', handle_toggle_active)
+        table.add_slot(
+            'body-cell-actions',
+            '''
+            <q-td :props="props">
+                <q-btn flat dense color="primary" label="View" @click="$parent.$emit('open', props.row.id)" />
+            </q-td>
+        ''',
+        )
+        table.on('open', lambda e: ui.navigate.to(f'/admin/users/{e.args}'))
+
+
+@ui.page('/admin/users')
+def admin_users_list_page():
+    if not is_project_admin():
+        ui.navigate.to('/login?error=admin_only')
+        return
+    users_list_page_refreshable()
+
+
+@ui.page('/admin/users/{user_id}')
+def admin_user_detail_page(user_id: int):
+    if not is_project_admin():
+        ui.navigate.to('/login?error=admin_only')
+        return
+
+    session = Session()
+    user = session.query(User).filter_by(id=user_id).first()
+    if not user:
+        session.close()
+        with ui.column().classes('p-8'):
+            ui.label('User not found').classes('text-red-600')
+            ui.button('Back', on_click=lambda: ui.navigate.to('/admin/users')).classes('mt-4')
+        return
+
+    uid = user.id
+    email = user.email
+    current_role = user.role
+    current_active = bool(user.is_active)
+    session.close()
+
+    roles = ['admin', 'instructor', 'ir', 'student']
+
+    with ui.column().classes('w-full max-w-lg mx-auto p-8 gap-4'):
+        ui.label('Edit user').classes('text-3xl font-bold')
+        ui.label(email).classes('text-lg text-gray-700 break-all')
+        role_select = ui.select(roles, value=current_role, label='Role').classes('w-full')
+        active_switch = ui.switch('Account active', value=current_active).classes('mt-2')
+
+        def save():
+            new_role = role_select.value
+            new_active = bool(active_switch.value)
+            if uid == get_current_user_id() and new_role != 'admin':
+                ui.notify('You cannot remove your own admin role from this screen.', type='warning')
+                return
+            if uid == get_current_user_id() and not new_active:
+                ui.notify('You cannot deactivate your own account.', type='warning')
+                return
+            sess = Session()
+            u = sess.query(User).filter_by(id=uid).first()
+            if not u:
+                sess.close()
+                return
+            u.role = new_role
+            u.is_active = new_active
+            sess.commit()
+            sess.close()
+            if uid == get_current_user_id():
+                app.storage.user['role'] = new_role
+            ui.notify('User updated', type='positive')
+            ui.navigate.to('/admin/users')
+
+        ui.button('Save', on_click=save).classes('bg-blue-600 text-white')
+        ui.button('← Back to list', on_click=lambda: ui.navigate.to('/admin/users')).classes('bg-gray-500 text-white')
 
 
 def ir_survey_links_page(request: Request):

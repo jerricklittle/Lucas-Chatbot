@@ -38,6 +38,13 @@ def is_admin() -> bool:
     return role in ['admin', 'instructor']
 
 
+def is_project_admin() -> bool:
+    """Full project admin (user management, destructive ops). Not instructors."""
+    if not is_authenticated():
+        return False
+    return app.storage.user.get('role') == 'admin'
+
+
 def is_ir() -> bool:
     """Institutional research office role (survey link generation only)."""
     if not is_authenticated():
@@ -181,8 +188,13 @@ def login_page(request: Request):
                     ui.label('Google did not return your account details').classes(
                         'text-red-700 font-bold'
                     )
-            
-            
+            elif error == 'inactive':
+                with ui.card().classes('w-full bg-amber-50 border border-amber-300 p-4 mb-4'):
+                    ui.label('Account disabled').classes('text-amber-900 font-bold')
+                    ui.label(
+                        'This account has been deactivated. Contact a project administrator if this is a mistake.'
+                    ).classes('text-amber-800 text-sm')
+
             ui.separator().classes('my-4')
             ui.label('Or sign in with email').classes('text-sm text-gray-600 text-center')
             

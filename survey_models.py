@@ -18,6 +18,10 @@ class Survey(Base):
     is_active = Column(Boolean, default=True)
     created_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # Who owns this survey
     settings = Column(JSONB, nullable=True)  # Store survey settings like allowBack, etc.
+    # Naive UTC: first moment the survey accepts responses; None = no start restriction.
+    opens_at = Column(DateTime, nullable=True)
+    # Naive UTC: last moment responses are accepted; None = no end restriction.
+    closes_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
