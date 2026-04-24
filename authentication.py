@@ -8,6 +8,7 @@ from nicegui import ui, app
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from starlette.requests import Request
 from Base import Base
 from user import User
 from dotenv import load_dotenv
@@ -37,6 +38,17 @@ def is_admin() -> bool:
     return role in ['admin', 'instructor']
 
 
+def is_ir() -> bool:
+    """Institutional research office role (survey link generation only)."""
+    if not is_authenticated():
+        return False
+    return app.storage.user.get('role') == 'ir'
+
+
+def can_access_ir_tools() -> bool:
+    return is_admin() or is_ir()
+
+
 def get_current_user():
     """Get current logged-in user email"""
     return app.storage.user.get('email')
@@ -45,11 +57,6 @@ def get_current_user():
 def get_current_user_role():
     """Get current logged-in user role"""
     return app.storage.user.get('role')
-
-
-def get_current_user_id():
-    """Get current logged-in user ID"""
-    return app.storage.user.get('user_id')
 
 
 def get_current_user_id():
@@ -138,24 +145,42 @@ def register_user(email: str, password: str, role: str = 'instructor') -> tuple[
 
 
 @ui.page('/login')
-def login_page(error: str = None):
-    """Login page"""
+def login_page(request: Request):
+    """Login page for staff (admin, instructor, IR)."""
 
-    
-    # If already authenticated, redirect to admin
+    error = request.query_params.get('error')
+
     if is_admin():
         ui.navigate.to('/admin')
         return
-    
+    if is_ir():
+        ui.navigate.to('/admin/ir/links')
+        return
+
     with ui.column().classes('w-full h-screen bg-gray-100 flex items-center justify-center'):
         with ui.card().classes('w-full max-w-md p-4'):
-            ui.label('Admin Login').classes('text-3xl font-bold mb-6 text-center')
-            
-            # Show error if redirected with error param
+            ui.label('Staff login').classes('text-3xl font-bold mb-6 text-center')
+            ui.label('For survey administrators and institutional research staff.').classes(
+                'text-sm text-gray-600 text-center mb-4'
+            )
+
             if error == 'admin_only':
                 with ui.card().classes('w-full bg-red-50 border border-red-300 p-4 mb-4'):
-                    ui.label('🚫 Access Denied').classes('text-red-700 font-bold')
-                    ui.label('Only admins and instructors are allowed to access this area.').classes('text-red-600 text-sm')
+                    ui.label('Access denied').classes('text-red-700 font-bold')
+                    ui.label(
+                        'This sign-in is for authorized staff only. If you are a student, use the personalized link from your institution.'
+                    ).classes('text-red-600 text-sm')
+            elif error == 'oauth_failed':
+                with ui.card().classes('w-full bg-red-50 border border-red-300 p-4 mb-4'):
+                    ui.label('Google sign-in failed').classes('text-red-700 font-bold')
+                    ui.label('Try again, or contact the project team if this continues.').classes(
+                        'text-red-600 text-sm'
+                    )
+            elif error in ('no_user_info', 'no_email'):
+                with ui.card().classes('w-full bg-red-50 border border-red-300 p-4 mb-4'):
+                    ui.label('Google did not return your account details').classes(
+                        'text-red-700 font-bold'
+                    )
             
             
             ui.separator().classes('my-4')
@@ -169,9 +194,12 @@ def login_page(error: str = None):
             def attempt_login():
                 success, message = login_user(email_input.value, password_input.value)
                 if success:
-                    ui.navigate.to('/admin')
+                    if get_current_user_role() == 'ir':
+                        ui.navigate.to('/admin/ir/links')
+                    else:
+                        ui.navigate.to('/admin')
                 else:
-                    error_label.text = ui.label('🚫 Access Denied. Only admins and instructors are allowed to access this area.')
+                    error_label.text = message
                     error_label.visible = True
             
             password_input.on('keydown.enter', attempt_login)
@@ -183,7 +211,9 @@ def login_page(error: str = None):
             ui.label('Need an account?').classes('text-sm text-gray-600 text-center')
             ui.button('Create Account', on_click=lambda: ui.navigate.to('/register')).classes('w-full bg-gray-600 text-white')
             
-            ui.button('← Back to Survey', on_click=lambda: ui.navigate.to('/')).classes('w-full bg-gray-400 text-white mt-2')
+            ui.button('← Back to project home', on_click=lambda: ui.navigate.to('/')).classes(
+                'w-full bg-gray-400 text-white mt-2'
+            )
 
 
 @ui.page('/register')

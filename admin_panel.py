@@ -3,15 +3,29 @@ Admin Panel for Survey and Question Management
 Provides CRUD operations for surveys and questions via NiceGUI interface
 """
 
+import csv
+import io
 import json
 import os
+import secrets
+from urllib.parse import quote
+
 from nicegui import ui
+from starlette.requests import Request
 from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from Base import Base
 from survey_models import Survey, QuestionBank, SurveyQuestion
-from authentication import is_authenticated, is_admin, get_current_user, get_current_user_role, get_current_user_id, logout_user
+from app_config import get_public_base_url
+from authentication import (
+    is_admin,
+    is_ir,
+    can_access_ir_tools,
+    get_current_user,
+    get_current_user_id,
+    logout_user,
+)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -711,31 +725,38 @@ def remove_question_from_survey(sq_id):
 @ui.page('/admin')
 def admin_home():
     """Admin dashboard home"""
+    if is_ir() and not is_admin():
+        ui.navigate.to('/admin/ir/links')
+        return
     if not is_admin():
         ui.navigate.to('/login?error=admin_only')
         return
-    
+
     with ui.column().classes('w-full max-w-4xl mx-auto p-8'):
         with ui.row().classes('w-full justify-between items-center mb-8'):
             with ui.column():
                 ui.label('Survey Admin Panel').classes('text-4xl font-bold')
                 ui.label(f'Logged in as: {get_current_user()}').classes('text-sm text-gray-600')
             with ui.row().classes('gap-2'):
-                ui.button('← Back to Survey', on_click=lambda: ui.navigate.to('/')).classes('bg-gray-500 text-white')
+                ui.button('← Project home', on_click=lambda: ui.navigate.to('/')).classes('bg-gray-500 text-white')
                 ui.button('Logout', on_click=lambda: ui.navigate.to('/logout')).classes('bg-red-600 text-white')
-        
-        with ui.row().classes('gap-4'):
+
+        with ui.row().classes('gap-4 flex-wrap'):
             with ui.card().classes('w-64 p-6 cursor-pointer hover:shadow-lg').on('click', lambda: ui.navigate.to('/admin/surveys')):
                 ui.label('📋 Surveys').classes('text-2xl font-bold')
                 ui.label('Manage survey pages').classes('text-gray-600')
-            
+
             with ui.card().classes('w-64 p-6 cursor-pointer hover:shadow-lg').on('click', lambda: ui.navigate.to('/admin/questions')):
                 ui.label('❓ Questions').classes('text-2xl font-bold')
                 ui.label('Manage question bank').classes('text-gray-600')
-            
+
             with ui.card().classes('w-64 p-6 cursor-pointer hover:shadow-lg').on('click', lambda: ui.navigate.to('/admin/analytics')):
                 ui.label('📊 Analytics').classes('text-2xl font-bold')
                 ui.label('View response insights').classes('text-gray-600')
+
+            with ui.card().classes('w-64 p-6 cursor-pointer hover:shadow-lg').on('click', lambda: ui.navigate.to('/admin/ir/links')):
+                ui.label('🔗 IR links').classes('text-2xl font-bold')
+                ui.label('Personalized student URLs (CSV)').classes('text-gray-600')
 
 
 @ui.page('/admin/questions')
@@ -968,6 +989,114 @@ def survey_detail_page(survey_id: int):
                         ui.label('Multi-select responses (visualization coming soon)').classes('text-gray-500 italic')
             
             session.close()
+
+
+def ir_survey_links_page(request: Request):
+    """Generate personalized survey URLs (status, id, url) for the IR office."""
+    base = get_public_base_url(request)
+    session = Session()
+    surveys = session.query(Survey).filter_by(is_active=True).order_by(Survey.id).all()
+    session.close()
+
+    with ui.column().classes('w-full max-w-4xl mx-auto p-8 gap-4'):
+        with ui.row().classes('w-full justify-between items-center flex-wrap gap-2'):
+            ui.label('IR: personalized survey links').classes('text-3xl font-bold')
+            with ui.row().classes('gap-2'):
+                if is_admin():
+                    ui.button('Admin panel', on_click=lambda: ui.navigate.to('/admin')).classes(
+                        'bg-blue-700 text-white'
+                    )
+                ui.button('Project home', on_click=lambda: ui.navigate.to('/')).classes('bg-gray-500 text-white')
+                ui.button('Logout', on_click=lambda: ui.navigate.to('/logout')).classes('bg-red-600 text-white')
+
+        ui.label(f'Logged in as: {get_current_user()}').classes('text-sm text-gray-600')
+
+        if base and not os.getenv('PUBLIC_BASE_URL', '').strip() and not os.getenv(
+            'RAILWAY_PUBLIC_DOMAIN', ''
+        ).strip() and not os.getenv('RAILWAY_ENVIRONMENT', '').strip():
+            ui.label(
+                f'Local dev: using your current site URL as the link base ({base}). '
+                'Set PUBLIC_BASE_URL (and/or RAILWAY_PUBLIC_DOMAIN) on Railway for production links.'
+            ).classes('text-xs text-slate-500')
+
+        if not base:
+            ui.label(
+                'Set PUBLIC_BASE_URL (https://…) or RAILWAY_PUBLIC_DOMAIN. '
+                'If you are debugging locally, unset RAILWAY_ENVIRONMENT in .env so the app can infer http://localhost:… from your browser.'
+            ).classes('text-amber-800 bg-amber-50 border border-amber-200 p-4 rounded')
+
+        ui.label(
+            'Each row in the spreadsheet lists whether the participant token is new or reused, the token, '
+            'and the full URL. Send only the URL column to students as instructed by your protocol.'
+        ).classes('text-gray-600 text-sm')
+
+        if not surveys:
+            ui.label('No active surveys in the system.').classes('text-orange-600')
+            return
+
+        labels = [f'{s.id}: {s.name}' for s in surveys]
+        survey_select = ui.select(
+            labels,
+            value=labels[0],
+            label='Survey',
+        ).classes('w-full max-w-xl')
+
+        id_to_label = {f'{s.id}: {s.name}': s.id for s in surveys}
+
+        ids_input = ui.textarea(
+            label='Existing IDs to reuse (optional)',
+            placeholder='One per line, or comma-separated',
+        ).classes('w-full').props('rows=5')
+
+        n_input = ui.number('Number of new IDs to create', value=0, min=0, precision=0).classes('w-full max-w-xs')
+
+        def generate_csv():
+            if not base:
+                ui.notify('Set PUBLIC_BASE_URL or RAILWAY_PUBLIC_DOMAIN first', type='warning')
+                return
+            label = survey_select.value
+            survey_id = id_to_label[label]
+            raw = ids_input.value or ''
+            tokens = []
+            for chunk in raw.replace(',', '\n').split('\n'):
+                t = chunk.strip()
+                if t:
+                    tokens.append(t)
+            seen: set[str] = set()
+            ordered: list[str] = []
+            for t in tokens:
+                if t not in seen:
+                    seen.add(t)
+                    ordered.append(t)
+            n_new = int(n_input.value or 0)
+            if not ordered and n_new <= 0:
+                ui.notify('Add at least one existing ID or set N > 0', type='warning')
+                return
+            rows_out: list[list[str]] = [['status', 'id', 'url']]
+            for t in ordered:
+                q = quote(t, safe='')
+                rows_out.append(['existing', t, f'{base}/survey/{survey_id}?sid={q}'])
+            for _ in range(n_new):
+                nid = secrets.token_urlsafe(18)
+                while nid in seen:
+                    nid = secrets.token_urlsafe(18)
+                seen.add(nid)
+                qn = quote(nid, safe='')
+                rows_out.append(['new', nid, f'{base}/survey/{survey_id}?sid={qn}'])
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerows(rows_out)
+            ui.download(buf.getvalue().encode('utf-8'), f'sai_survey_{survey_id}_links.csv')
+
+        ui.button('Download spreadsheet (CSV)', on_click=generate_csv).classes('bg-blue-600 text-white w-fit')
+
+
+@ui.page('/admin/ir/links')
+def admin_ir_links_page(request: Request):
+    if not can_access_ir_tools():
+        ui.navigate.to('/login?error=admin_only')
+        return
+    ir_survey_links_page(request)
 
 
 # Run the admin panel

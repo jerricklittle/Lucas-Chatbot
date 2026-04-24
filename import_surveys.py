@@ -73,7 +73,10 @@ def import_survey_from_json(filepath):
             config = {
                 'options': q_data.get('options', ['Option 1', 'Option 2'])
             }
-        
+
+        if q_data.get('tags'):
+            config['tags'] = q_data['tags']
+
         # Create question in bank
         question = QuestionBank(
             name=q_data.get('id', f'q_{idx}'),
