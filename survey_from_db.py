@@ -80,8 +80,10 @@ def _question_bank_to_item(q: QuestionBank, sq: SurveyQuestion) -> dict[str, Any
         }
     elif q.question_type == "text":
         item["text"] = (cfg.get("text") or {}).copy()
-        if sq.is_adaptive:
+        adaptive_flag = bool(sq.is_adaptive) or bool(cfg.get("adaptive"))
+        if adaptive_flag:
             item["adaptive"] = True
+            item["prompt_text"] = str(cfg.get("prompt_text") or "").strip()
     elif q.question_type == "multi":
         item["options"] = cfg.get("options") or ["Option 1", "Option 2"]
     return item

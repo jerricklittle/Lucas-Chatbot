@@ -115,7 +115,7 @@ from survey_browser_flow import render_survey_entry_with_landing  # noqa: E402
 from survey_from_db import sid_already_submitted, student_survey_access  # noqa: E402
 
 TEAM = [
-    ("Research team", "Principal investigator and instrument design"),
+    ("Research team", "Principal investigators and research assistants"),
     ("Assessment & analytics", "Data handling under IR and FERPA guidance"),
 ]
 
@@ -135,10 +135,10 @@ def landing_page():
 This site supports **SAI (Student Assessment Instrument)** research: designing and
 evaluating how we gather instructional feedback while protecting respondents.
 
-Student participation is **by invitation only**, using a **personalized link** issued by
-your institution’s research office. Those links carry a pseudonymous identifier so the
+Participation is **by invitation only**, using a **personalized link** issued by
+the Institutional Research Office. Those links carry a pseudonymous identifier so the
 office can manage consent and longitudinal tracking **without** this application storing
-directly identifying student information in the survey link itself.
+directly identifying participation information in the survey link itself.
 """
             ).classes("text-slate-700 leading-relaxed")
 
@@ -181,15 +181,14 @@ def consent_page():
             ui.markdown(
                 """
 Participation is voluntary. You may skip questions or stop at any time. Responses are
-used for research and quality improvement under protocols approved by your institution.
+used for research and quality improvement under protocols approved by the university.
 
 **Who sees your answers:** authorized researchers and institutional research staff, under
 FERPA and local policy. This system stores survey responses linked to a **pseudonymous
-identifier** (`sid`) supplied by your institution—not your email or student ID entered
-in this form by default.
+identifier** supplied by the institution's research office, not your email or university ID.
 
 For the full consent language and data retention details, use the official document
-linked from the project home page when your IR office provides it.
+linked from the project home page when the IR office provides it.
 """
             ).classes("text-slate-700 leading-relaxed")
             if external:
@@ -226,7 +225,7 @@ def student_survey_entry(survey_public_id: str, request: Request):
             with ui.card().classes("max-w-lg w-full p-8 text-center"):
                 ui.label("Personalized link required").classes("text-xl font-bold text-slate-900 mb-2")
                 ui.label(
-                    "Open the survey using the link emailed to you by your institution. "
+                    "Open the survey using the link emailed to you by the institution. "
                     "It includes a secure participant code."
                 ).classes("text-slate-600")
                 ui.button("Project home", on_click=lambda: ui.navigate.to("/")).classes("mt-6")

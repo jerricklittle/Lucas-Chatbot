@@ -3,6 +3,7 @@ Admin Panel for Survey and Question Management
 Provides CRUD operations for surveys and questions via NiceGUI interface
 """
 
+import copy
 import csv
 import io
 import json
@@ -196,12 +197,12 @@ def question_form(question=None, return_survey_id=None):
     """Page 2 from mockups: Question New/Edit form"""
     is_edit = question is not None
     
-    # State for dynamic form fields
+    # State for dynamic form fields (deep copy config so edits don't mutate ORM cached dict)
     form_state = {
         'name': question.name if is_edit else '',
         'text': question.question_text if is_edit else '',
         'type': question.question_type if is_edit else 'likert',
-        'config': question.config if is_edit else {}
+        'config': copy.deepcopy(question.config) if is_edit and getattr(question, 'config', None) else {},
     }
     
     with ui.column().classes('w-full max-w-2xl mx-auto p-8'):
@@ -216,24 +217,7 @@ def question_form(question=None, return_survey_id=None):
             # Question text
             text_input = ui.textarea('Question Text', value=form_state['text']).classes('w-full')
             text_input.bind_value(form_state, 'text')
-            
-            # Type selector
-            def handle_type_change(e):
-                # Clear config when type changes
-                print(f"Type changed to: {e.value}")
-                form_state['type'] = e.value
-                form_state['config'] = {}
-                print(f"Config cleared: {form_state['config']}")
-                config_section.refresh()
-            
-            type_select = ui.select(
-                ['likert', 'boolean', 'text', 'multi'],
-                label='Type',
-                value=form_state['type'],
-                on_change=handle_type_change
-            ).classes('w-full')
-            
-            # Dynamic config section (refreshable based on type)
+
             @ui.refreshable
             def config_section():
                 current_type = form_state['type']
@@ -322,32 +306,81 @@ def question_form(question=None, return_survey_id=None):
                 
                 elif current_type == 'text':
                     ui.label('Open Ended Options').classes('text-lg font-semibold mt-4 mb-2')
-                    
-                    # Initialize text config
-                    if 'text' not in form_state['config']:
-                        form_state['config'] = {
-                            'text': {
-                                'placeholder': 'Enter your response...',
-                                'charLimit': 1000
-                            }
+
+                    if 'text' not in form_state['config'] or not isinstance(form_state['config'].get('text'), dict):
+                        form_state['config']['text'] = {
+                            'placeholder': 'Enter your response...',
+                            'charLimit': 1000,
                         }
-                    
+                    tcfg = form_state['config']['text']
+                    tcfg.setdefault('placeholder', 'Enter your response...')
+                    tcfg.setdefault('charLimit', 1000)
+                    form_state['config'].setdefault('adaptive', False)
+                    form_state['config'].setdefault('prompt_text', '')
+
                     ui.select(
                         [500, 1000, 1500, 2000],
                         label='Character Limit',
-                        value=form_state['config']['text']['charLimit']
+                        value=tcfg['charLimit'],
                     ).classes('w-full').on(
-                        'change', lambda e: form_state['config']['text'].update({'charLimit': e.value})
+                        'change', lambda e: tcfg.update({'charLimit': e.value})
                     )
-                    
+
                     ui.input(
                         'Placeholder',
-                        value=form_state['config']['text']['placeholder']
+                        value=tcfg['placeholder'],
                     ).classes('w-full').on(
-                        'change', lambda e: form_state['config']['text'].update({'placeholder': e.value})
+                        'change', lambda e: tcfg.update({'placeholder': e.value})
                     )
-            
+
+            @ui.refreshable
+            def adaptive_followup_section():
+                if form_state['type'] != 'text':
+                    return
+                cfg = form_state.setdefault('config', {})
+                cfg.setdefault('adaptive', False)
+                cfg.setdefault('prompt_text', '')
+
+                ui.label('Adaptive follow-up').classes('text-lg font-semibold mt-4 mb-2')
+                ui.label(
+                    'When enabled, a substantive answer may trigger AI-generated follow-up questions after this item.'
+                ).classes('text-sm text-gray-600 mb-2')
+
+                ad_cb = ui.checkbox(
+                    'Enable adaptive (AI follow-up questions)',
+                    value=bool(cfg.get('adaptive')),
+                ).classes('w-full')
+
+                with ui.column().classes('w-full mt-2') as prompt_holder:
+                    ui.label('Optional: context / instructions for the AI (exported as prompt_text).').classes(
+                        'text-sm text-gray-600 mb-1'
+                    )
+                    ta = ui.textarea(value=str(cfg.get('prompt_text') or '')).classes('w-full')
+                    ta.on('blur', lambda: cfg.update({'prompt_text': str(ta.value or '').strip()}))
+
+                prompt_holder.set_visibility(bool(cfg.get('adaptive')))
+
+                def on_adaptive_change(e):
+                    cfg['adaptive'] = bool(e.value)
+                    prompt_holder.set_visibility(cfg['adaptive'])
+
+                ad_cb.on('change', on_adaptive_change)
+
+            def handle_type_change(e):
+                form_state['type'] = e.value
+                form_state['config'] = {}
+                config_section.refresh()
+                adaptive_followup_section.refresh()
+
+            ui.select(
+                ['likert', 'boolean', 'text', 'multi'],
+                label='Type',
+                value=form_state['type'],
+                on_change=handle_type_change,
+            ).classes('w-full')
+
             config_section()
+            adaptive_followup_section()
             
             # Save button
             with ui.row().classes('w-full justify-end gap-2 mt-6'):
@@ -395,17 +428,34 @@ def save_question(form_state, question_id=None, return_survey_id=None):
     if not form_state['text'].strip():
         ui.notify('Question text is required', type='negative')
         return
-    
+
+    raw_cfg = form_state['config']
+    cfg = copy.deepcopy(raw_cfg) if isinstance(raw_cfg, dict) else {}
+    if form_state['type'] != 'text':
+        cfg.pop('adaptive', None)
+        cfg.pop('prompt_text', None)
+    else:
+        adaptive_on = bool(cfg.get('adaptive'))
+        cfg['adaptive'] = adaptive_on
+        if adaptive_on:
+            cfg['prompt_text'] = str(cfg.get('prompt_text') or '').strip()
+        else:
+            cfg.pop('prompt_text', None)
+
+    survey_link_adaptive = form_state['type'] == 'text' and bool(cfg.get('adaptive'))
+
     session = Session()
-    
+
     if question_id:
         # Update existing
         question = session.query(QuestionBank).filter_by(id=question_id).first()
         question.name = form_state['name']
         question.question_text = form_state['text']
         question.question_type = form_state['type']
-        question.config = form_state['config']
+        question.config = cfg
         question.version += 1
+        for sq in session.query(SurveyQuestion).filter_by(question_id=question_id).all():
+            sq.is_adaptive = survey_link_adaptive
         message = f'Question "{question.name}" updated'
     else:
         # Create new
@@ -413,19 +463,20 @@ def save_question(form_state, question_id=None, return_survey_id=None):
             name=form_state['name'],
             question_text=form_state['text'],
             question_type=form_state['type'],
-            config=form_state['config'],
+            config=cfg,
             created_by=get_current_user_id()  # Set owner
         )
         session.add(question)
         session.flush()  # Get the ID
-        
+
         # If called from survey edit, add to that survey
         if return_survey_id:
             max_order = session.query(SurveyQuestion).filter_by(survey_id=return_survey_id).count()
             sq = SurveyQuestion(
                 survey_id=return_survey_id,
                 question_id=question.id,
-                order=max_order + 1
+                order=max_order + 1,
+                is_adaptive=survey_link_adaptive,
             )
             session.add(sq)
         
@@ -601,6 +652,9 @@ def import_survey_json_dict(data: dict) -> int:
                 cfg['options'] = q.get('options') or {}
             elif qtype == 'text':
                 cfg['text'] = q.get('text') or {}
+                if bool(q.get('adaptive') or q.get('is_adaptive')):
+                    cfg['adaptive'] = True
+                    cfg['prompt_text'] = str(q.get('prompt_text') or '').strip()
             elif qtype == 'multi':
                 cfg['options'] = q.get('options') or []
 
